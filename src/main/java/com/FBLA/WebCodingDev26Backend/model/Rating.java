@@ -1,8 +1,5 @@
 package com.FBLA.WebCodingDev26Backend.model;
 
-import jakarta.persistence.Embeddable;
-
-@Embeddable
 public class Rating {
     private String claimId;
     private Integer rating;

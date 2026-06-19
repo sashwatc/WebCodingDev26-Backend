@@ -11,7 +11,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class FoundItemService {
@@ -29,7 +28,6 @@ public class FoundItemService {
         return repository.findAll();
     }
 
-    @Transactional
     public FoundItem create(Map<String, Object> data) {
         FoundItem item = mapper.convert(data, FoundItem.class);
         String now = clock.now();
@@ -43,7 +41,6 @@ public class FoundItemService {
         return repository.save(item);
     }
 
-    @Transactional
     public FoundItem update(String id, Map<String, Object> data) {
         FoundItem existing = repository.findById(id).orElseThrow(() -> new NotFoundException("Found item not found"));
 
@@ -64,7 +61,6 @@ public class FoundItemService {
         return repository.save(existing);
     }
 
-    @Transactional
     public boolean delete(String id) {
         if (!repository.existsById(id)) {
             throw new NotFoundException("Found item not found");

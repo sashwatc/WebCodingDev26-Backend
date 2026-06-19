@@ -8,13 +8,30 @@ Spring Boot backend for the Lost Then Found Vite/React frontend.
 - Spring Boot 4.1.0
 - Maven
 - Spring Web MVC
-- Spring Data JPA
+- Spring Data MongoDB
 - Validation
-- H2 local database
+- MongoDB Atlas, database `lostthenfound`
+
+## MongoDB Setup
+
+Create a MongoDB Atlas cluster and set these environment variables before running the app:
+
+```env
+MONGO_URI=mongodb+srv://USERNAME:PASSWORD@lostthenfound.3rv5ips.mongodb.net/lostthenfound?retryWrites=true&w=majority&appName=LostThenFound
+MONGO_DATABASE=lostthenfound
+```
+
+Do not include angle brackets around the real password, and do not commit `.env`, `.env.local`, or other local secret files.
+
+The production/default Spring profile expects `MONGO_URI` to be present. For a safe local profile example, see `src/main/resources/application-local.properties`.
+
+Because this repo is on Spring Boot 4.1, Mongo connection settings are wired through Spring Boot's `spring.mongodb.*` properties while still reading the same `MONGO_URI` and `MONGO_DATABASE` environment variables.
 
 ## Run Locally
 
 ```bash
+export MONGO_URI="mongodb+srv://USERNAME:PASSWORD@lostthenfound.3rv5ips.mongodb.net/lostthenfound?retryWrites=true&w=majority&appName=LostThenFound"
+export MONGO_DATABASE=lostthenfound
 ./mvnw spring-boot:run
 ```
 
@@ -30,35 +47,39 @@ Health check:
 GET http://localhost:8080/api/health
 ```
 
-## Database
+Expected shape:
 
-Local development uses H2 by default:
-
-```text
-jdbc:h2:file:./data/lost-then-found;AUTO_SERVER=TRUE
-```
-
-The app creates/updates tables automatically with `spring.jpa.hibernate.ddl-auto=update` and seeds demo data on first startup.
-
-H2 console:
-
-```text
-http://localhost:8080/h2-console
+```json
+{
+  "status": "ok",
+  "database": "mongodb",
+  "connected": true
+}
 ```
 
 ## Environment Variables
 
 ```text
 PORT=8080
-DATABASE_URL=jdbc:h2:file:./data/lost-then-found;AUTO_SERVER=TRUE
-DATABASE_USERNAME=sa
-DATABASE_PASSWORD=
+MONGO_URI=mongodb+srv://USERNAME:PASSWORD@lostthenfound.3rv5ips.mongodb.net/lostthenfound?retryWrites=true&w=majority&appName=LostThenFound
+MONGO_DATABASE=lostthenfound
 FRONTEND_URL=https://your-frontend.example.com
 ADMIN_EMAIL=avery.patel@pleasantvalley.edu
 SEED_DATA_ENABLED=true
 ```
 
-For a future Postgres deployment, point `DATABASE_URL`, `DATABASE_USERNAME`, and `DATABASE_PASSWORD` at the hosted database and add the Postgres JDBC driver dependency.
+## Data
+
+MongoDB collections:
+
+- `found_items`
+- `lost_reports`
+- `claims`
+- `notifications`
+- `audit_logs`
+- `users`
+
+Seed data is inserted only when the `found_items` collection is empty and `SEED_DATA_ENABLED` is true.
 
 ## Frontend Integration
 
@@ -98,6 +119,8 @@ Supported generic entities:
 
 ## Tests
 
+Tests mock the service layer where appropriate so Atlas is not required during CI/local verification.
+
 ```bash
 ./mvnw test
 ```
@@ -106,4 +129,3 @@ Supported generic entities:
 
 - Auth intentionally matches the current simple frontend flow; no JWT/security layer yet.
 - Uploads return the submitted `data_url` through an upload service abstraction. Cloud storage can be added there later.
-- Local dev uses H2. Postgres is the intended next production database step.

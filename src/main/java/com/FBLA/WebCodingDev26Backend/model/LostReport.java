@@ -1,23 +1,16 @@
 package com.FBLA.WebCodingDev26Backend.model;
 
-import jakarta.persistence.CollectionTable;
-import jakarta.persistence.Column;
-import jakarta.persistence.ElementCollection;
-import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.Lob;
 import java.util.ArrayList;
 import java.util.List;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Document;
 
-@Entity
+@Document(collection = "lost_reports")
 public class LostReport {
     @Id
     private String id;
     private String title;
     private String category;
-    @Lob
     private String description;
     private String color;
     private String brand;
@@ -32,14 +25,8 @@ public class LostReport {
     private String createdDate;
     private String updatedDate;
 
-    @ElementCollection(fetch = FetchType.EAGER)
-    @CollectionTable(name = "lost_report_photo_urls", joinColumns = @JoinColumn(name = "lost_report_id"))
-    @Column(name = "photo_url", length = 4000)
     private List<String> photoUrls = new ArrayList<>();
 
-    @ElementCollection(fetch = FetchType.EAGER)
-    @CollectionTable(name = "lost_report_matched_items", joinColumns = @JoinColumn(name = "lost_report_id"))
-    @Column(name = "matched_item")
     private List<String> matchedItems = new ArrayList<>();
 
     public String getId() { return id; }

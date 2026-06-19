@@ -1,23 +1,15 @@
 package com.FBLA.WebCodingDev26Backend.model;
 
-import jakarta.persistence.CollectionTable;
-import jakarta.persistence.Column;
-import jakarta.persistence.ElementCollection;
-import jakarta.persistence.Embedded;
-import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.Lob;
 import java.util.ArrayList;
 import java.util.List;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Document;
 
-@Entity
+@Document(collection = "found_items")
 public class FoundItem {
     @Id
     private String id;
     private String title;
-    @Lob
     private String description;
     private String category;
     private String subcategory;
@@ -30,9 +22,7 @@ public class FoundItem {
     private String recordType;
     private String createdDate;
     private String updatedDate;
-    @Lob
     private String aiDescription;
-    @Lob
     private String distinguishingFeatures;
     private String finderName;
     private String finderEmail;
@@ -46,19 +36,10 @@ public class FoundItem {
     private Boolean claimConfirmed;
     private String claimConfirmedAt;
 
-    @ElementCollection(fetch = FetchType.EAGER)
-    @CollectionTable(name = "found_item_photo_urls", joinColumns = @JoinColumn(name = "found_item_id"))
-    @Column(name = "photo_url", length = 4000)
     private List<String> photoUrls = new ArrayList<>();
 
-    @ElementCollection(fetch = FetchType.EAGER)
-    @CollectionTable(name = "found_item_tags", joinColumns = @JoinColumn(name = "found_item_id"))
-    @Column(name = "tag")
     private List<String> tags = new ArrayList<>();
 
-    @ElementCollection(fetch = FetchType.EAGER)
-    @CollectionTable(name = "found_item_ratings", joinColumns = @JoinColumn(name = "found_item_id"))
-    @Embedded
     private List<Rating> ratings = new ArrayList<>();
 
     public String getId() { return id; }

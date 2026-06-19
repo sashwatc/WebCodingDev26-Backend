@@ -1,7 +1,9 @@
 package com.FBLA.WebCodingDev26Backend.repository;
 
 import com.FBLA.WebCodingDev26Backend.model.Claim;
-import org.springframework.data.jpa.repository.JpaRepository;
+import java.util.List;
+import org.springframework.data.mongodb.repository.MongoRepository;
 
-public interface ClaimRepository extends JpaRepository<Claim, String> {
+public interface ClaimRepository extends MongoRepository<Claim, String> {
+    List<Claim> findByClaimantEmail(String claimantEmail);
 }

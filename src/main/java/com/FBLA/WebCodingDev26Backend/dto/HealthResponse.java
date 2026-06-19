@@ -1,4 +1,4 @@
 package com.FBLA.WebCodingDev26Backend.dto;
 
-public record HealthResponse(String status, String service) {
+public record HealthResponse(String status, String database, boolean connected) {
 }

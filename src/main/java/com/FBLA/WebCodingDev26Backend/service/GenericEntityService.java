@@ -14,9 +14,8 @@ import com.FBLA.WebCodingDev26Backend.repository.NotificationRepository;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class GenericEntityService {
@@ -47,7 +46,6 @@ public class GenericEntityService {
         return adapter(entityName).repository().findAll();
     }
 
-    @Transactional
     public Object create(String entityName, Map<String, Object> data) {
         EntityAdapter<?> adapter = adapter(entityName);
         Object entity = mapper.convert(data, adapter.type());
@@ -55,7 +53,6 @@ public class GenericEntityService {
         return save(adapter, entity);
     }
 
-    @Transactional
     public Object update(String entityName, String id, Map<String, Object> data) {
         EntityAdapter<?> adapter = adapter(entityName);
         Object existing = adapter.repository().findById(id).orElseThrow(() -> new NotFoundException(entityName + " not found"));
@@ -65,7 +62,6 @@ public class GenericEntityService {
         return save(adapter, existing);
     }
 
-    @Transactional
     public boolean delete(String entityName, String id) {
         EntityAdapter<?> adapter = adapter(entityName);
         if (!adapter.repository().existsById(id)) {
@@ -132,6 +128,6 @@ public class GenericEntityService {
         return value == null || value.isBlank() ? fallback : value;
     }
 
-    private record EntityAdapter<T>(JpaRepository<T, String> repository, Class<T> type, String prefix) {
+    private record EntityAdapter<T>(MongoRepository<T, String> repository, Class<T> type, String prefix) {
     }
 }

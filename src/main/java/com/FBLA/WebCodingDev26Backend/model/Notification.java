@@ -1,16 +1,14 @@
 package com.FBLA.WebCodingDev26Backend.model;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Document;
 
-@Entity
+@Document(collection = "notifications")
 public class Notification {
     @Id
     private String id;
     private String userEmail;
     private String title;
-    @Lob
     private String message;
     private String type;
     private String link;

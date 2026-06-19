@@ -1,20 +1,17 @@
 package com.FBLA.WebCodingDev26Backend.model;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.Indexed;
+import org.springframework.data.mongodb.core.mapping.Document;
 
-@Entity
-@Table(name = "app_user")
+@Document(collection = "users")
 public class AppUser {
     @Id
     private String id;
     private String fullName;
-    @Column(unique = true, nullable = false)
+    @Indexed(unique = true)
     private String email;
     private String role;
-    @Column(length = 4000)
     private String avatarUrl;
     private String createdDate;
     private String updatedDate;

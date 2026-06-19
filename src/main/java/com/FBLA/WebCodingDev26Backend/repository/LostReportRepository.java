@@ -1,7 +1,9 @@
 package com.FBLA.WebCodingDev26Backend.repository;
 
 import com.FBLA.WebCodingDev26Backend.model.LostReport;
-import org.springframework.data.jpa.repository.JpaRepository;
+import java.util.List;
+import org.springframework.data.mongodb.repository.MongoRepository;
 
-public interface LostReportRepository extends JpaRepository<LostReport, String> {
+public interface LostReportRepository extends MongoRepository<LostReport, String> {
+    List<LostReport> findByContactEmail(String contactEmail);
 }

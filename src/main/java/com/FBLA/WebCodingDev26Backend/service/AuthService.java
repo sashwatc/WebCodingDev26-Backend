@@ -8,7 +8,6 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class AuthService {
@@ -27,7 +26,6 @@ public class AuthService {
         return normalizedEmail.isBlank() ? Optional.empty() : repository.findByEmail(normalizedEmail);
     }
 
-    @Transactional
     public AppUser signIn(SignInRequest request) {
         String normalizedEmail = normalize(request.getEmail());
         String now = clock.now();

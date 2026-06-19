@@ -1,17 +1,11 @@
 package com.FBLA.WebCodingDev26Backend.model;
 
-import jakarta.persistence.CollectionTable;
-import jakarta.persistence.Column;
-import jakarta.persistence.ElementCollection;
-import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.Lob;
 import java.util.ArrayList;
 import java.util.List;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Document;
 
-@Entity
+@Document(collection = "claims")
 public class Claim {
     @Id
     private String id;
@@ -19,19 +13,12 @@ public class Claim {
     private String claimantName;
     private String claimantEmail;
     private String claimantPhone;
-    @Lob
     private String claimReason;
-    @Lob
     private String identifyingDetails;
-    @Column(length = 4000)
     private String proofPhotoUrl;
     private String status;
     private Integer riskScore;
-    @ElementCollection(fetch = FetchType.EAGER)
-    @CollectionTable(name = "claim_risk_flags", joinColumns = @JoinColumn(name = "claim_id"))
-    @Column(name = "risk_flag")
     private List<String> riskFlags = new ArrayList<>();
-    @Lob
     private String adminNotes;
     private String reviewedBy;
     private String reviewedAt;
