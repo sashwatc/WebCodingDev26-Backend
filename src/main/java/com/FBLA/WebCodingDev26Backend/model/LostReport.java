@@ -2,9 +2,11 @@ package com.FBLA.WebCodingDev26Backend.model;
 
 import java.util.ArrayList;
 import java.util.List;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 @Document(collection = "lost_reports")
 public class LostReport {
     @Id
@@ -24,10 +26,12 @@ public class LostReport {
     private String urgency;
     private String createdDate;
     private String updatedDate;
+    private String extraNotes;
+    private String studentId;
 
     private List<String> photoUrls = new ArrayList<>();
 
-    private List<String> matchedItems = new ArrayList<>();
+    private List<Object> matchedItems = new ArrayList<>();
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
@@ -35,6 +39,8 @@ public class LostReport {
     public void setTitle(String title) { this.title = title; }
     public String getCategory() { return category; }
     public void setCategory(String category) { this.category = category; }
+    public String getItemType() { return title; }
+    public void setItemType(String itemType) { this.title = itemType; }
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
     public String getColor() { return color; }
@@ -45,6 +51,8 @@ public class LostReport {
     public void setLocationLost(String locationLost) { this.locationLost = locationLost; }
     public String getDateLost() { return dateLost; }
     public void setDateLost(String dateLost) { this.dateLost = dateLost; }
+    public String getLastSeenLocation() { return locationLost; }
+    public void setLastSeenLocation(String lastSeenLocation) { this.locationLost = lastSeenLocation; }
     public String getTimeLost() { return timeLost; }
     public void setTimeLost(String timeLost) { this.timeLost = timeLost; }
     public String getContactName() { return contactName; }
@@ -61,8 +69,16 @@ public class LostReport {
     public void setCreatedDate(String createdDate) { this.createdDate = createdDate; }
     public String getUpdatedDate() { return updatedDate; }
     public void setUpdatedDate(String updatedDate) { this.updatedDate = updatedDate; }
+    public String getExtraNotes() { return extraNotes; }
+    public void setExtraNotes(String extraNotes) { this.extraNotes = extraNotes; }
+    public String getStudentId() { return studentId; }
+    public void setStudentId(String studentId) { this.studentId = studentId; }
     public List<String> getPhotoUrls() { return photoUrls; }
     public void setPhotoUrls(List<String> photoUrls) { this.photoUrls = photoUrls == null ? new ArrayList<>() : photoUrls; }
-    public List<String> getMatchedItems() { return matchedItems; }
-    public void setMatchedItems(List<String> matchedItems) { this.matchedItems = matchedItems == null ? new ArrayList<>() : matchedItems; }
+    public String getPhotoUrl() { return photoUrls == null || photoUrls.isEmpty() ? "" : photoUrls.get(0); }
+    public void setPhotoUrl(String photoUrl) {
+        this.photoUrls = photoUrl == null || photoUrl.isBlank() ? new ArrayList<>() : new ArrayList<>(List.of(photoUrl));
+    }
+    public List<Object> getMatchedItems() { return matchedItems; }
+    public void setMatchedItems(List<Object> matchedItems) { this.matchedItems = matchedItems == null ? new ArrayList<>() : matchedItems; }
 }
