@@ -18,9 +18,9 @@ import com.FBLA.WebCodingDev26Backend.repository.ClaimRepository;
 import com.FBLA.WebCodingDev26Backend.repository.FoundItemRepository;
 import com.FBLA.WebCodingDev26Backend.repository.LostReportRepository;
 import com.FBLA.WebCodingDev26Backend.repository.NotificationRepository;
-import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.boot.CommandLineRunner;
@@ -49,7 +49,7 @@ class SeedDataConfigTest {
 
         runner.run();
 
-        verify(foundItems).saveAll(any(List.class));
+        verify(foundItems).saveAll(ArgumentMatchers.<FoundItem>anyIterable());
         verify(lostReports).save(any(LostReport.class));
         verify(claims).save(any(Claim.class));
         verify(notifications).save(any(Notification.class));
@@ -66,7 +66,7 @@ class SeedDataConfigTest {
 
         runner.run();
 
-        verify(foundItems, never()).saveAll(any(List.class));
+        verify(foundItems, never()).saveAll(ArgumentMatchers.<FoundItem>anyIterable());
         verify(lostReports, never()).save(any(LostReport.class));
     }
 
@@ -78,6 +78,6 @@ class SeedDataConfigTest {
         runner.run();
 
         verify(foundItems, never()).count();
-        verify(foundItems, never()).saveAll(any(List.class));
+        verify(foundItems, never()).saveAll(ArgumentMatchers.<FoundItem>anyIterable());
     }
 }

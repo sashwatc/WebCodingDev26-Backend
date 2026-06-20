@@ -4,5 +4,8 @@
     "ts": "cd ../WebCodingDev26 && ./run ts",
     "backend": "./mvnw spring-boot:run",
     "dev": "./mvnw spring-boot:run"
+  },
+  "dependencies": {
+    "mongodb": "^7.3.0"
   }
 }

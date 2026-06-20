@@ -15,7 +15,7 @@ public class AuthService {
     private final ClockService clock;
     private final String adminEmail;
 
-    public AuthService(AppUserRepository repository, ClockService clock, @Value("${app.admin-email}") String adminEmail) {
+    public AuthService(AppUserRepository repository, ClockService clock, @Value("${app.admin-email:}") String adminEmail) {
         this.repository = repository;
         this.clock = clock;
         this.adminEmail = normalize(adminEmail);

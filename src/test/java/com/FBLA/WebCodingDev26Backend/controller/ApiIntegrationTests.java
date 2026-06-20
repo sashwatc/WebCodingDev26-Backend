@@ -17,11 +17,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.FBLA.WebCodingDev26Backend.config.JacksonConfig;
-import com.FBLA.WebCodingDev26Backend.controller.AuthController;
-import com.FBLA.WebCodingDev26Backend.controller.FoundItemController;
-import com.FBLA.WebCodingDev26Backend.controller.GenericEntityController;
-import com.FBLA.WebCodingDev26Backend.controller.HealthController;
-import com.FBLA.WebCodingDev26Backend.controller.UploadController;
 import com.FBLA.WebCodingDev26Backend.dto.HealthResponse;
 import com.FBLA.WebCodingDev26Backend.dto.SignInRequest;
 import com.FBLA.WebCodingDev26Backend.dto.UploadRequest;
@@ -39,11 +34,10 @@ import com.FBLA.WebCodingDev26Backend.service.FoundItemService;
 import com.FBLA.WebCodingDev26Backend.service.GenericEntityService;
 import com.FBLA.WebCodingDev26Backend.service.HealthService;
 import com.FBLA.WebCodingDev26Backend.service.UploadService;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -51,12 +45,14 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
 import org.springframework.http.converter.StringHttpMessageConverter;
-import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
+import org.springframework.http.converter.json.JacksonJsonHttpMessageConverter;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.filter.CorsFilter;
+import tools.jackson.databind.PropertyNamingStrategies;
+import tools.jackson.databind.json.JsonMapper;
 
 @ExtendWith(MockitoExtension.class)
 class ApiIntegrationTests {
@@ -86,7 +82,7 @@ class ApiIntegrationTests {
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setMessageConverters(
                         new StringHttpMessageConverter(StandardCharsets.UTF_8),
-                        new MappingJackson2HttpMessageConverter(new JacksonConfig().objectMapper())
+                        jsonConverter()
                 )
                 .addFilters(corsFilter())
                 .build();
@@ -338,6 +334,13 @@ class ApiIntegrationTests {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/api/**", configuration);
         return new CorsFilter(source);
+    }
+
+    private JacksonJsonHttpMessageConverter jsonConverter() {
+        JsonMapper mapper = JsonMapper.builder()
+                .propertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE)
+                .build();
+        return new JacksonJsonHttpMessageConverter(mapper);
     }
 
     private FoundItem foundItem(String id) {
