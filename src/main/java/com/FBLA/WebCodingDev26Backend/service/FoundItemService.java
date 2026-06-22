@@ -3,7 +3,6 @@ package com.FBLA.WebCodingDev26Backend.service;
 import com.FBLA.WebCodingDev26Backend.exception.NotFoundException;
 import com.FBLA.WebCodingDev26Backend.dto.PublicFoundItemResponse;
 import com.FBLA.WebCodingDev26Backend.mapper.PatchMapper;
-import com.FBLA.WebCodingDev26Backend.model.AssetRegistryRecord;
 import com.FBLA.WebCodingDev26Backend.model.FoundItem;
 import com.FBLA.WebCodingDev26Backend.model.LostReport;
 import com.FBLA.WebCodingDev26Backend.model.Rating;
@@ -30,6 +29,7 @@ public class FoundItemService {
     private final FoundItemRepository repository;
     private final PatchMapper mapper;
     private final ClockService clock;
+    private final WorkflowService workflow;
     private final MatchmakingService matchmakingService;
     private final AssetRegistryRecordRepository assetRegistry;
     private final ClaimRepository claims;
@@ -39,10 +39,13 @@ public class FoundItemService {
     private final CustodyLedgerService custodyLedgerService;
 
     public FoundItemService(FoundItemRepository repository, PatchMapper mapper, ClockService clock) {
-        this(repository, mapper, clock, null, null, null, null, null, null, null);
+        this(repository, mapper, clock, null, null, null, null, null, null, null, null);
     }
 
-    @Autowired
+    public FoundItemService(FoundItemRepository repository, PatchMapper mapper, ClockService clock, WorkflowService workflow) {
+        this(repository, mapper, clock, workflow, null, null, null, null, null, null, null);
+    }
+
     public FoundItemService(
             FoundItemRepository repository,
             PatchMapper mapper,
@@ -55,9 +58,27 @@ public class FoundItemService {
             LostReportRepository lostReports,
             CustodyLedgerService custodyLedgerService
     ) {
+        this(repository, mapper, clock, null, matchmakingService, assetRegistry, claims, custodyEvents, recoveryCases, lostReports, custodyLedgerService);
+    }
+
+    @Autowired
+    public FoundItemService(
+            FoundItemRepository repository,
+            PatchMapper mapper,
+            ClockService clock,
+            WorkflowService workflow,
+            MatchmakingService matchmakingService,
+            AssetRegistryRecordRepository assetRegistry,
+            ClaimRepository claims,
+            CustodyEventRepository custodyEvents,
+            RecoveryCaseRepository recoveryCases,
+            LostReportRepository lostReports,
+            CustodyLedgerService custodyLedgerService
+    ) {
         this.repository = repository;
         this.mapper = mapper;
         this.clock = clock;
+        this.workflow = workflow;
         this.matchmakingService = matchmakingService;
         this.assetRegistry = assetRegistry;
         this.claims = claims;
@@ -97,16 +118,10 @@ public class FoundItemService {
         item.setIsFlagged(Boolean.TRUE.equals(item.getIsFlagged()));
         item.setClaimConfirmed(Boolean.TRUE.equals(item.getClaimConfirmed()));
         applyAssetRegistryDefaults(item);
-        FoundItem saved = repository.save(item);
-        appendCustody(saved, "intake_created", "Found item intake created.");
-        if (matchmakingService != null) {
-            try {
-                matchmakingService.refreshMatchesForFoundItem(saved.getId());
-            } catch (RuntimeException exception) {
-                LOGGER.warn("Unable to refresh matches for found item {}: {}", saved.getId(), exception.getMessage());
-            }
-        }
-        return saved;
+        FoundItem savedItem = repository.save(item);
+        appendCustody(savedItem, "intake_created", "Found item intake created.");
+        refreshMatches(savedItem);
+        return savedItem;
     }
 
     public FoundItem update(String id, Map<String, Object> data) {
@@ -127,20 +142,22 @@ public class FoundItemService {
         mapper.copyPresent(data, patch, existing, "id", "createdDate");
         applyAssetRegistryDefaults(existing);
         existing.setUpdatedDate(clock.now());
-        return repository.save(existing);
+        FoundItem savedItem = repository.save(existing);
+        refreshMatches(savedItem);
+        return savedItem;
     }
 
-    public boolean delete(String id) {
+    public Map<String, Object> delete(String id) {
         FoundItem existing = repository.findById(id).orElseThrow(() -> new NotFoundException("Found item not found"));
-        if (shouldArchiveInsteadOfDelete(id)) {
+        if (hasFoundItemReferences(id)) {
             existing.setStatus("archived");
             existing.setUpdatedDate(clock.now());
-            repository.save(existing);
-            appendCustody(existing, "archived", "Found item archived instead of hard-deleted because related records exist.");
-            return true;
+            FoundItem archivedItem = repository.save(existing);
+            appendCustody(archivedItem, "archived", "Found item archived instead of hard-deleted because related records exist.");
+            return Map.of("success", true, "archived", true, "item", archivedItem);
         }
         repository.deleteById(id);
-        return true;
+        return Map.of("success", true, "archived", false);
     }
 
     public boolean isPubliclyVisible(FoundItem item) {
@@ -157,6 +174,18 @@ public class FoundItemService {
         existing.setRatings(ratings);
         existing.setUpdatedDate(clock.now());
         return repository.save(existing);
+    }
+
+    private void refreshMatches(FoundItem item) {
+        if (matchmakingService == null || item == null || item.getId() == null || item.getId().isBlank()) {
+            return;
+        }
+
+        try {
+            matchmakingService.refreshMatchesForFoundItem(item.getId());
+        } catch (RuntimeException exception) {
+            LOGGER.warn("Unable to refresh matches for found item {}: {}", item.getId(), exception.getMessage());
+        }
     }
 
     private Map<String, Object> asMap(Object value) {
@@ -188,6 +217,13 @@ public class FoundItemService {
             item.setAssetRecordId(record.getId());
             item.setDepartmentDestination(record.getDepartmentDestination());
         });
+    }
+
+    private boolean hasFoundItemReferences(String foundItemId) {
+        if (workflow != null && workflow.hasFoundItemReferences(foundItemId)) {
+            return true;
+        }
+        return shouldArchiveInsteadOfDelete(foundItemId);
     }
 
     private boolean shouldArchiveInsteadOfDelete(String foundItemId) {

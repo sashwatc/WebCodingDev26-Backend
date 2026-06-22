@@ -32,6 +32,7 @@ public class GenericEntityService {
     private final AuditLogRepository auditLogs;
     private final PatchMapper mapper;
     private final ClockService clock;
+    private final WorkflowService workflow;
     private final MatchmakingService matchmakingService;
     private final FoundItemRepository foundItems;
     private final RecoveryCaseService recoveryCaseService;
@@ -45,10 +46,21 @@ public class GenericEntityService {
             PatchMapper mapper,
             ClockService clock
     ) {
-        this(lostReports, claims, notifications, auditLogs, mapper, clock, null, null, null, null);
+        this(lostReports, claims, notifications, auditLogs, mapper, clock, null, null, null, null, null);
     }
 
-    @Autowired
+    public GenericEntityService(
+            LostReportRepository lostReports,
+            ClaimRepository claims,
+            NotificationRepository notifications,
+            AuditLogRepository auditLogs,
+            PatchMapper mapper,
+            ClockService clock,
+            WorkflowService workflow
+    ) {
+        this(lostReports, claims, notifications, auditLogs, mapper, clock, workflow, null, null, null, null);
+    }
+
     public GenericEntityService(
             LostReportRepository lostReports,
             ClaimRepository claims,
@@ -61,12 +73,30 @@ public class GenericEntityService {
             RecoveryCaseService recoveryCaseService,
             CustodyLedgerService custodyLedgerService
     ) {
+        this(lostReports, claims, notifications, auditLogs, mapper, clock, null, matchmakingService, foundItems, recoveryCaseService, custodyLedgerService);
+    }
+
+    @Autowired
+    public GenericEntityService(
+            LostReportRepository lostReports,
+            ClaimRepository claims,
+            NotificationRepository notifications,
+            AuditLogRepository auditLogs,
+            PatchMapper mapper,
+            ClockService clock,
+            WorkflowService workflow,
+            MatchmakingService matchmakingService,
+            FoundItemRepository foundItems,
+            RecoveryCaseService recoveryCaseService,
+            CustodyLedgerService custodyLedgerService
+    ) {
         this.lostReports = lostReports;
         this.claims = claims;
         this.notifications = notifications;
         this.auditLogs = auditLogs;
         this.mapper = mapper;
         this.clock = clock;
+        this.workflow = workflow;
         this.matchmakingService = matchmakingService;
         this.foundItems = foundItems;
         this.recoveryCaseService = recoveryCaseService;
@@ -82,20 +112,12 @@ public class GenericEntityService {
         Object entity = mapper.convert(data, adapter.type());
         applyCreateDefaults(entity, adapter.prefix());
         validateCreate(entity);
+        if (entity instanceof Claim claim && workflow != null) {
+            workflow.validateClaim(claim, null);
+        }
         Object saved = save(adapter, entity);
-        if (saved instanceof LostReport lostReport && matchmakingService != null) {
-            try {
-                if (recoveryCaseService != null) {
-                    recoveryCaseService.ensureForLostReport(lostReport);
-                }
-                matchmakingService.refreshMatchesForLostReport(lostReport.getId());
-                if (recoveryCaseService != null) {
-                    recoveryCaseService.refreshForLostReport(lostReport.getId());
-                }
-                return lostReports.findById(lostReport.getId()).orElse(lostReport);
-            } catch (RuntimeException exception) {
-                LOGGER.warn("Unable to refresh matches for lost report {}: {}", lostReport.getId(), exception.getMessage());
-            }
+        if (saved instanceof LostReport lostReport) {
+            return refreshMatches(lostReport);
         }
         if (saved instanceof Claim claim && recoveryCaseService != null) {
             recoveryCaseService.onClaimSubmitted(claim);
@@ -112,17 +134,28 @@ public class GenericEntityService {
     public Object update(String entityName, String id, Map<String, Object> data) {
         EntityAdapter<?> adapter = adapter(entityName);
         Object existing = adapter.repository().findById(id).orElseThrow(() -> new NotFoundException(entityName + " not found"));
+        Object previous = mapper.convert(Map.of(), adapter.type());
+        mapper.copyNonNull(existing, previous);
         Object patch = mapper.convert(data, adapter.type());
         mapper.copyPresent(data, patch, existing, "id", "createdDate");
         validateUpdate(existing);
         applyUpdateTimestamp(existing);
+        if (existing instanceof Claim claim && workflow != null) {
+            workflow.validateClaim(claim, (Claim) previous);
+        }
         Object saved = save(adapter, existing);
         if (saved instanceof Claim claim && recoveryCaseService != null) {
             recoveryCaseService.onClaimSubmitted(claim);
         }
+        if (saved instanceof Claim claim && workflow != null) {
+            workflow.applyClaimStatusSideEffects(claim, (Claim) previous);
+        }
         if (saved instanceof Claim claim && isTerminalClaimStatus(claim.getStatus())) {
             markFoundItemForTerminalClaim(claim);
             appendClaimCustodyEvent(claim, "approved".equalsIgnoreCase(claim.getStatus()) ? "claim_approved" : "returned");
+        }
+        if (saved instanceof LostReport lostReport) {
+            return refreshMatches(lostReport);
         }
         return saved;
     }
@@ -160,7 +193,7 @@ public class GenericEntityService {
             lostReport.setUpdatedDate(valueOrDefault(lostReport.getUpdatedDate(), now));
         } else if (entity instanceof Claim claim) {
             claim.setId(valueOrGenerated(claim.getId(), prefix));
-            claim.setStatus(valueOrDefault(claim.getStatus(), "pending_review"));
+            claim.setStatus(valueOrDefault(claim.getStatus(), "submitted"));
             claim.setRiskScore(claim.getRiskScore() == null ? 0 : claim.getRiskScore());
             claim.setCreatedDate(valueOrDefault(claim.getCreatedDate(), now));
             claim.setUpdatedDate(valueOrDefault(claim.getUpdatedDate(), now));
@@ -253,9 +286,10 @@ public class GenericEntityService {
                 foundItems.save(item);
             }
             if ("completed".equalsIgnoreCase(claim.getStatus())) {
+                String confirmedAt = valueOrDefault(claim.getReceivedConfirmedAt(), clock.now());
                 item.setStatus("returned");
                 item.setClaimConfirmed(true);
-                item.setClaimConfirmedAt(clock.now());
+                item.setClaimConfirmedAt(confirmedAt);
                 item.setUpdatedDate(clock.now());
                 foundItems.save(item);
                 if (recoveryCaseService != null) {
@@ -271,6 +305,29 @@ public class GenericEntityService {
 
     private String valueOrDefault(String value, String fallback) {
         return value == null || value.isBlank() ? fallback : value;
+    }
+
+    private LostReport refreshMatches(LostReport lostReport) {
+        if (lostReport.getId() == null || lostReport.getId().isBlank()) {
+            return lostReport;
+        }
+
+        try {
+            if (recoveryCaseService != null) {
+                recoveryCaseService.ensureForLostReport(lostReport);
+            }
+            if (matchmakingService == null) {
+                return lostReport;
+            }
+            matchmakingService.refreshMatchesForLostReport(lostReport.getId());
+            if (recoveryCaseService != null) {
+                recoveryCaseService.refreshForLostReport(lostReport.getId());
+            }
+            return lostReports.findById(lostReport.getId()).orElse(lostReport);
+        } catch (RuntimeException exception) {
+            LOGGER.warn("Unable to refresh matches for lost report {}: {}", lostReport.getId(), exception.getMessage());
+            return lostReport;
+        }
     }
 
     private record EntityAdapter<T>(MongoRepository<T, String> repository, Class<T> type, String prefix) {

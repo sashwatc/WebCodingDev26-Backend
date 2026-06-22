@@ -42,6 +42,7 @@ public class FoundItem {
     private String departmentDestination;
     private String eventHubId;
     private String campusZoneId;
+    private String linkedLostReportId;
 
     private List<String> photoUrls = new ArrayList<>();
 
@@ -117,6 +118,8 @@ public class FoundItem {
     public void setEventHubId(String eventHubId) { this.eventHubId = eventHubId; }
     public String getCampusZoneId() { return campusZoneId; }
     public void setCampusZoneId(String campusZoneId) { this.campusZoneId = campusZoneId; }
+    public String getLinkedLostReportId() { return linkedLostReportId; }
+    public void setLinkedLostReportId(String linkedLostReportId) { this.linkedLostReportId = linkedLostReportId; }
     public List<String> getPhotoUrls() { return photoUrls; }
     public void setPhotoUrls(List<String> photoUrls) { this.photoUrls = photoUrls == null ? new ArrayList<>() : photoUrls; }
     public List<String> getTags() { return tags; }

@@ -80,6 +80,7 @@ public class MatchmakingService {
                 .toList();
         List<MatchSuggestion> matches = buildMatches(report, candidates);
         report.setMatchedItems(new ArrayList<>(matches));
+        markMatchedIfActive(report, matches);
         report.setUpdatedDate(clock.now());
         lostReports.save(report);
         if (!matches.isEmpty() && recoveryCaseService != null) {
@@ -100,9 +101,13 @@ public class MatchmakingService {
             if (!eligibleLostReport(report)) {
                 continue;
             }
-            List<MatchSuggestion> matches = buildMatches(report, List.of(item));
+            List<MatchSuggestion> matches = new ArrayList<>(buildMatches(report, List.of(item)));
+            if (item.getLinkedLostReportId() != null && item.getLinkedLostReportId().equals(report.getId())) {
+                matches.add(finderResponseSuggestion(item));
+            }
             if (!matches.isEmpty()) {
                 mergeMatches(report, matches);
+                markMatchedIfActive(report, matches);
                 report.setUpdatedDate(clock.now());
                 lostReports.save(report);
                 if (recoveryCaseService != null) {
@@ -180,6 +185,33 @@ public class MatchmakingService {
         }
         incomingMatches.forEach(match -> merged.put(match.getFoundItemId(), match));
         report.setMatchedItems(new ArrayList<>(merged.values()));
+    }
+
+    private MatchSuggestion finderResponseSuggestion(FoundItem item) {
+        String now = clock.now();
+        MatchSuggestion suggestion = new MatchSuggestion();
+        suggestion.setFoundItemId(item.getId());
+        suggestion.setFoundItemTitle(item.getTitle());
+        suggestion.setCategory(item.getCategory());
+        suggestion.setColor(item.getColor());
+        suggestion.setBrand(item.getBrand());
+        suggestion.setLocationFound(item.getLocationFound());
+        suggestion.setDateFound(item.getDateFound());
+        suggestion.setPhotoUrls(item.getPhotoUrls());
+        suggestion.setConfidence(100);
+        suggestion.setReasons(List.of("finder response"));
+        suggestion.setSource("finder_response");
+        suggestion.setStatus("suggested");
+        suggestion.setCreatedDate(now);
+        suggestion.setUpdatedDate(now);
+        return suggestion;
+    }
+
+    private void markMatchedIfActive(LostReport report, List<MatchSuggestion> matches) {
+        String status = normalize(report.getStatus());
+        if (!matches.isEmpty() && !status.equals("resolved") && !status.equals("closed")) {
+            report.setStatus("matched");
+        }
     }
 
     private List<MatchSuggestion> typedMatches(LostReport report) {

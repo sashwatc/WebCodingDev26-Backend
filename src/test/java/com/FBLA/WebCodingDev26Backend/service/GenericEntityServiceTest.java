@@ -29,6 +29,8 @@ class GenericEntityServiceTest {
     private NotificationRepository notifications;
     @Mock
     private AuditLogRepository auditLogs;
+    @Mock
+    private WorkflowService workflow;
 
     @Test
     void createLostReportAcceptsFrontendPayloadShape() {
@@ -124,7 +126,8 @@ class GenericEntityServiceTest {
                 notifications,
                 auditLogs,
                 new PatchMapper(new JacksonConfig().objectMapper()),
-                new ClockService()
+                new ClockService(),
+                workflow
         );
     }
 }

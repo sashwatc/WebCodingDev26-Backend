@@ -47,7 +47,7 @@ public class FoundItemController {
     }
 
     @DeleteMapping("/{id}")
-    public Map<String, Boolean> delete(@PathVariable String id) {
-        return Map.of("success", service.delete(id));
+    public Map<String, Object> delete(@PathVariable String id) {
+        return service.delete(id);
     }
 }
