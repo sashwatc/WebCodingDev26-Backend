@@ -3,6 +3,7 @@ package com.FBLA.WebCodingDev26Backend.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -72,6 +73,27 @@ class MatchmakingServiceTest {
         assertThat(matches.get(0).getSource()).isEqualTo("ai");
         assertThat(matches.get(0).getConfidence()).isBetween(82, 100);
         assertThat(matches.get(0).getReasons()).contains("AI matched the backpack details.");
+    }
+
+    @Test
+    void refreshMatchesForLostReportIgnoresUnapprovedOrRestrictedFoundItems() {
+        LostReport report = lostBackpackReport();
+        FoundItem pendingBackpack = foundBackpack();
+        pendingBackpack.setId("found_pending");
+        pendingBackpack.setStatus("pending_review");
+        FoundItem restrictedBackpack = foundBackpack();
+        restrictedBackpack.setId("found_restricted");
+        restrictedBackpack.setRestrictedVisibility(true);
+
+        when(lostReports.findById("lost_001")).thenReturn(Optional.of(report));
+        when(foundItems.findAll()).thenReturn(List.of(pendingBackpack, restrictedBackpack));
+        when(lostReports.save(any(LostReport.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        List<MatchSuggestion> matches = service().refreshMatchesForLostReport("lost_001");
+
+        assertThat(matches).isEmpty();
+        assertThat(report.getStatus()).isEqualTo("open");
+        verify(aiMatchClient, never()).rankMatches(any(), any());
     }
 
     @Test

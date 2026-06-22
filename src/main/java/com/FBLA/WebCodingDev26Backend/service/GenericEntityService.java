@@ -320,9 +320,6 @@ public class GenericEntityService {
                 return lostReport;
             }
             matchmakingService.refreshMatchesForLostReport(lostReport.getId());
-            if (recoveryCaseService != null) {
-                recoveryCaseService.refreshForLostReport(lostReport.getId());
-            }
             return lostReports.findById(lostReport.getId()).orElse(lostReport);
         } catch (RuntimeException exception) {
             LOGGER.warn("Unable to refresh matches for lost report {}: {}", lostReport.getId(), exception.getMessage());

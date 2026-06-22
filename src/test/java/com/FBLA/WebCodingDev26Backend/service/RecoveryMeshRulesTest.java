@@ -256,6 +256,37 @@ class RecoveryMeshRulesTest {
     }
 
     @Test
+    void sentinelRecomputeUpdatesExistingActiveAlertInsteadOfDuplicating() {
+        LossSentinelService service = new LossSentinelService(preventionAlerts, lostReports, campusZones, mapper(), clock());
+        PreventionAlert existing = new PreventionAlert();
+        existing.setId("alert_existing");
+        existing.setTenantId("pvhs");
+        existing.setAlertType("volume_spike");
+        existing.setCampusZoneId("zone_gym");
+        existing.setCategory("electronics");
+        existing.setTimeWindowStart("2026-06-15");
+        existing.setTimeWindowEnd("2026-06-22");
+        existing.setStatus("open");
+        existing.setCreatedDate("2026-06-22T09:00:00Z");
+
+        when(preventionAlerts.findAll()).thenReturn(List.of(existing));
+        when(lostReports.findAll()).thenReturn(List.of(
+                lost("lost_1", "zone_gym", "electronics", "2026-06-21"),
+                lost("lost_2", "zone_gym", "electronics", "2026-06-21"),
+                lost("lost_3", "zone_gym", "electronics", "2026-06-21"),
+                lost("lost_4", "zone_gym", "electronics", "2026-06-21")
+        ));
+        when(preventionAlerts.save(any(PreventionAlert.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.recompute();
+
+        verify(preventionAlerts).save(existing);
+        assertThat(existing.getId()).isEqualTo("alert_existing");
+        assertThat(existing.getObservedCount()).isEqualTo(4);
+        assertThat(existing.getCreatedDate()).isEqualTo("2026-06-22T09:00:00Z");
+    }
+
+    @Test
     void partnerRelayResponseStaysRedacted() {
         PartnerRelay relay = new PartnerRelay();
         relay.setId("relay_001");

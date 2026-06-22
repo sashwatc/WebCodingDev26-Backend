@@ -45,6 +45,10 @@ public class LossSentinelService {
         LocalDate recentStart = today.minusDays(7);
         LocalDate baselineStart = today.minusDays(37);
         Map<GroupKey, Counts> grouped = new LinkedHashMap<>();
+        Map<AlertKey, PreventionAlert> existingByKey = new LinkedHashMap<>();
+        for (PreventionAlert alert : alerts.findAll()) {
+            existingByKey.putIfAbsent(alertKey(alert), alert);
+        }
 
         for (LostReport report : lostReports.findAll()) {
             LocalDate date = parseDate(report.getDateLost());
@@ -66,8 +70,24 @@ public class LossSentinelService {
             if (counts.observed < 4 || counts.observed < baseline * 2) {
                 continue;
             }
-            PreventionAlert alert = new PreventionAlert();
-            alert.setId("alert_" + UUID.randomUUID().toString().replace("-", "").substring(0, 10));
+
+            AlertKey alertKey = new AlertKey(
+                    "pvhs",
+                    "volume_spike",
+                    entry.getKey().campusZoneId(),
+                    entry.getKey().category(),
+                    recentStart.toString(),
+                    today.toString()
+            );
+            PreventionAlert alert = existingByKey.get(alertKey);
+            if (alert != null && isResolved(alert.getStatus())) {
+                continue;
+            }
+            if (alert == null) {
+                alert = new PreventionAlert();
+                alert.setId("alert_" + UUID.randomUUID().toString().replace("-", "").substring(0, 10));
+                alert.setCreatedDate(clock.now());
+            }
             alert.setTenantId("pvhs");
             alert.setTitle("Unusual increase detected");
             alert.setAlertType("volume_spike");
@@ -80,8 +100,7 @@ public class LossSentinelService {
             alert.setObservedCount(counts.observed);
             alert.setReasons(List.of(counts.observed + " " + entry.getKey().category() + " reports in the recent window.", "Recent volume is at least 2x the historical baseline."));
             alert.setSuggestedActions(List.of("Check likely benches, shelves, and office intake bins.", "Create recovery mission for the affected zone.", "Post a reminder near the zone exit."));
-            alert.setStatus("open");
-            alert.setCreatedDate(clock.now());
+            alert.setStatus(valueOrDefault(alert.getStatus(), "open"));
             alerts.save(alert);
         }
 
@@ -115,7 +134,21 @@ public class LossSentinelService {
         return value == null || value.isBlank() ? fallback : value;
     }
 
+    private AlertKey alertKey(PreventionAlert alert) {
+        return new AlertKey(
+                valueOrDefault(alert.getTenantId(), "pvhs"),
+                valueOrDefault(alert.getAlertType(), "volume_spike"),
+                valueOrDefault(alert.getCampusZoneId(), "unknown"),
+                valueOrDefault(alert.getCategory(), ""),
+                valueOrDefault(alert.getTimeWindowStart(), ""),
+                valueOrDefault(alert.getTimeWindowEnd(), "")
+        );
+    }
+
     private record GroupKey(String campusZoneId, String category) {
+    }
+
+    private record AlertKey(String tenantId, String alertType, String campusZoneId, String category, String timeWindowStart, String timeWindowEnd) {
     }
 
     private static class Counts {

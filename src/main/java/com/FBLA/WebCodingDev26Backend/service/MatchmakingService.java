@@ -23,6 +23,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class MatchmakingService {
     private static final Set<String> TERMINAL_FOUND_STATUSES = Set.of("claimed", "returned", "archived", "deleted");
+    private static final Set<String> MATCHABLE_FOUND_STATUSES = Set.of("approved");
     private static final Set<String> STOP_WORDS = Set.of(
             "a", "an", "and", "are", "at", "case", "for", "in", "is", "it", "lost", "missing", "of", "on", "the",
             "to", "was", "with"
@@ -300,7 +301,9 @@ public class MatchmakingService {
 
     private boolean eligibleFoundItem(FoundItem item) {
         String status = normalize(item.getStatus());
-        return !Boolean.TRUE.equals(item.getRestrictedVisibility()) && (status.isBlank() || !TERMINAL_FOUND_STATUSES.contains(status));
+        return !Boolean.TRUE.equals(item.getRestrictedVisibility())
+                && MATCHABLE_FOUND_STATUSES.contains(status)
+                && !TERMINAL_FOUND_STATUSES.contains(status);
     }
 
     private boolean eligibleLostReport(LostReport report) {

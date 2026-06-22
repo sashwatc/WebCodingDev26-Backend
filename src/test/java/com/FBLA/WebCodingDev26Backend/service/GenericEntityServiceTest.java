@@ -2,6 +2,8 @@ package com.FBLA.WebCodingDev26Backend.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.FBLA.WebCodingDev26Backend.config.JacksonConfig;
@@ -14,6 +16,7 @@ import com.FBLA.WebCodingDev26Backend.repository.LostReportRepository;
 import com.FBLA.WebCodingDev26Backend.repository.NotificationRepository;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -31,6 +34,10 @@ class GenericEntityServiceTest {
     private AuditLogRepository auditLogs;
     @Mock
     private WorkflowService workflow;
+    @Mock
+    private MatchmakingService matchmakingService;
+    @Mock
+    private RecoveryCaseService recoveryCaseService;
 
     @Test
     void createLostReportAcceptsFrontendPayloadShape() {
@@ -117,6 +124,37 @@ class GenericEntityServiceTest {
         assertThat(claim.getReviewStatus()).isEqualTo("pending");
         assertThat(claim.getReviewSubmittedAt()).isEqualTo("2026-03-15T12:01:00Z");
         assertThat(claim.getReviewReviewedAt()).isEmpty();
+    }
+
+    @Test
+    void lostReportUpdateDoesNotDoubleRefreshRecoveryCase() {
+        LostReport existing = new LostReport();
+        existing.setId("lost_001");
+        existing.setTitle("Original title");
+        existing.setStatus("open");
+
+        when(lostReports.findById("lost_001")).thenReturn(Optional.of(existing));
+        when(lostReports.save(any(LostReport.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        GenericEntityService service = new GenericEntityService(
+                lostReports,
+                claims,
+                notifications,
+                auditLogs,
+                new PatchMapper(new JacksonConfig().objectMapper()),
+                new ClockService(),
+                matchmakingService,
+                null,
+                recoveryCaseService,
+                null
+        );
+
+        LostReport report = (LostReport) service.update("LostReport", "lost_001", Map.of("title", "Updated title"));
+
+        assertThat(report.getTitle()).isEqualTo("Updated title");
+        verify(recoveryCaseService).ensureForLostReport(existing);
+        verify(matchmakingService).refreshMatchesForLostReport("lost_001");
+        verify(recoveryCaseService, never()).refreshForLostReport(any());
     }
 
     private GenericEntityService service() {
