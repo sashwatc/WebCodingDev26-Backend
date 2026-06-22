@@ -14,11 +14,16 @@ import com.FBLA.WebCodingDev26Backend.repository.NotificationRepository;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.stereotype.Service;
 
 @Service
 public class GenericEntityService {
+    private static final Logger LOGGER = LoggerFactory.getLogger(GenericEntityService.class);
+
     private final LostReportRepository lostReports;
     private final ClaimRepository claims;
     private final NotificationRepository notifications;
@@ -26,6 +31,7 @@ public class GenericEntityService {
     private final PatchMapper mapper;
     private final ClockService clock;
     private final WorkflowService workflow;
+    private final MatchmakingService matchmakingService;
 
     public GenericEntityService(
             LostReportRepository lostReports,
@@ -36,6 +42,20 @@ public class GenericEntityService {
             ClockService clock,
             WorkflowService workflow
     ) {
+        this(lostReports, claims, notifications, auditLogs, mapper, clock, workflow, null);
+    }
+
+    @Autowired
+    public GenericEntityService(
+            LostReportRepository lostReports,
+            ClaimRepository claims,
+            NotificationRepository notifications,
+            AuditLogRepository auditLogs,
+            PatchMapper mapper,
+            ClockService clock,
+            WorkflowService workflow,
+            MatchmakingService matchmakingService
+    ) {
         this.lostReports = lostReports;
         this.claims = claims;
         this.notifications = notifications;
@@ -43,6 +63,7 @@ public class GenericEntityService {
         this.mapper = mapper;
         this.clock = clock;
         this.workflow = workflow;
+        this.matchmakingService = matchmakingService;
     }
 
     public List<?> list(String entityName) {
@@ -58,7 +79,7 @@ public class GenericEntityService {
         }
         Object saved = save(adapter, entity);
         if (saved instanceof LostReport lostReport) {
-            return workflow.syncMatchesForLostReport(lostReport);
+            return refreshMatches(lostReport);
         }
         return saved;
     }
@@ -79,7 +100,7 @@ public class GenericEntityService {
             workflow.applyClaimStatusSideEffects(claim, (Claim) previous);
         }
         if (saved instanceof LostReport lostReport) {
-            return workflow.syncMatchesForLostReport(lostReport);
+            return refreshMatches(lostReport);
         }
         return saved;
     }
@@ -148,6 +169,20 @@ public class GenericEntityService {
 
     private String valueOrDefault(String value, String fallback) {
         return value == null || value.isBlank() ? fallback : value;
+    }
+
+    private LostReport refreshMatches(LostReport lostReport) {
+        if (matchmakingService == null || lostReport.getId() == null || lostReport.getId().isBlank()) {
+            return lostReport;
+        }
+
+        try {
+            matchmakingService.refreshMatchesForLostReport(lostReport.getId());
+            return lostReports.findById(lostReport.getId()).orElse(lostReport);
+        } catch (RuntimeException exception) {
+            LOGGER.warn("Unable to refresh matches for lost report {}: {}", lostReport.getId(), exception.getMessage());
+            return lostReport;
+        }
     }
 
     private record EntityAdapter<T>(MongoRepository<T, String> repository, Class<T> type, String prefix) {

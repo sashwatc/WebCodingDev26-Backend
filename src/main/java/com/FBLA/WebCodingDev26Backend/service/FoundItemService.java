@@ -10,20 +10,38 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
 public class FoundItemService {
+    private static final Logger LOGGER = LoggerFactory.getLogger(FoundItemService.class);
+
     private final FoundItemRepository repository;
     private final PatchMapper mapper;
     private final ClockService clock;
     private final WorkflowService workflow;
+    private final MatchmakingService matchmakingService;
 
     public FoundItemService(FoundItemRepository repository, PatchMapper mapper, ClockService clock, WorkflowService workflow) {
+        this(repository, mapper, clock, workflow, null);
+    }
+
+    @Autowired
+    public FoundItemService(
+            FoundItemRepository repository,
+            PatchMapper mapper,
+            ClockService clock,
+            WorkflowService workflow,
+            MatchmakingService matchmakingService
+    ) {
         this.repository = repository;
         this.mapper = mapper;
         this.clock = clock;
         this.workflow = workflow;
+        this.matchmakingService = matchmakingService;
     }
 
     public List<FoundItem> list() {
@@ -41,7 +59,7 @@ public class FoundItemService {
         item.setIsFlagged(Boolean.TRUE.equals(item.getIsFlagged()));
         item.setClaimConfirmed(Boolean.TRUE.equals(item.getClaimConfirmed()));
         FoundItem savedItem = repository.save(item);
-        workflow.syncMatchesForFoundItem(savedItem);
+        refreshMatches(savedItem);
         return savedItem;
     }
 
@@ -63,7 +81,7 @@ public class FoundItemService {
         mapper.copyPresent(data, patch, existing, "id", "createdDate");
         existing.setUpdatedDate(clock.now());
         FoundItem savedItem = repository.save(existing);
-        workflow.syncMatchesForFoundItem(savedItem);
+        refreshMatches(savedItem);
         return savedItem;
     }
 
@@ -87,6 +105,18 @@ public class FoundItemService {
         existing.setRatings(ratings);
         existing.setUpdatedDate(clock.now());
         return repository.save(existing);
+    }
+
+    private void refreshMatches(FoundItem item) {
+        if (matchmakingService == null || item == null || item.getId() == null || item.getId().isBlank()) {
+            return;
+        }
+
+        try {
+            matchmakingService.refreshMatchesForFoundItem(item.getId());
+        } catch (RuntimeException exception) {
+            LOGGER.warn("Unable to refresh matches for found item {}: {}", item.getId(), exception.getMessage());
+        }
     }
 
     private Map<String, Object> asMap(Object value) {

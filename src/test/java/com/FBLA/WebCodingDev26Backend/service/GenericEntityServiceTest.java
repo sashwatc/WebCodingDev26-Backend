@@ -37,7 +37,6 @@ class GenericEntityServiceTest {
         GenericEntityService service = service();
 
         when(lostReports.save(any(LostReport.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(workflow.syncMatchesForLostReport(any(LostReport.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         LostReport report = (LostReport) service.create("LostReport", Map.ofEntries(
                 Map.entry("item_type", "AirPods Pro case"),
