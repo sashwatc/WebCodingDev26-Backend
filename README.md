@@ -86,6 +86,16 @@ MongoDB collections:
 - `notifications`
 - `audit_logs`
 - `users`
+- `recovery_cases`
+- `recovery_missions`
+- `campus_zones`
+- `event_recovery_hubs`
+- `custody_events`
+- `asset_registry`
+- `return_passes`
+- `prevention_alerts`
+- `recovery_nodes`
+- `partner_relays`
 
 Seed data is inserted only when the `found_items` collection is empty and `SEED_DATA_ENABLED` is true.
 
@@ -110,6 +120,7 @@ VITE_API_URL=https://your-backend.example.com npm run build
 - `POST /api/items`
 - `PATCH /api/items/{id}`
 - `DELETE /api/items/{id}`
+- `GET /api/admin/items`
 - `GET /api/entities/{entityName}`
 - `POST /api/entities/{entityName}`
 - `PATCH /api/entities/{entityName}/{id}`
@@ -120,6 +131,7 @@ VITE_API_URL=https://your-backend.example.com npm run build
 - `GET /api/auth/user?email={email}`
 - `POST /api/auth/signin`
 - `POST /api/uploads`
+- Recovery Mesh endpoints are documented in `docs/RECOVERY_MESH_API_CONTRACT.md`.
 
 Supported generic entities:
 
@@ -141,3 +153,4 @@ Tests mock the service layer where appropriate so Atlas is not required during C
 - Auth intentionally matches the current simple frontend flow; no JWT/security layer yet.
 - Uploads return the submitted `data_url` through an upload service abstraction. Cloud storage can be added there later.
 - AI matchmaking sends only item details to the configured AI endpoint, not student contact fields.
+- Event hubs, beacons, display mode, asset lookup, and partner relays are demo/integration-ready adapters, not live PVHS system integrations.

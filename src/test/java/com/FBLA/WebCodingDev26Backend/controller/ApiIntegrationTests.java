@@ -18,6 +18,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.FBLA.WebCodingDev26Backend.config.JacksonConfig;
 import com.FBLA.WebCodingDev26Backend.dto.HealthResponse;
+import com.FBLA.WebCodingDev26Backend.dto.PublicFoundItemResponse;
 import com.FBLA.WebCodingDev26Backend.dto.SignInRequest;
 import com.FBLA.WebCodingDev26Backend.dto.UploadRequest;
 import com.FBLA.WebCodingDev26Backend.dto.UploadResponse;
@@ -31,6 +32,7 @@ import com.FBLA.WebCodingDev26Backend.model.MatchSuggestion;
 import com.FBLA.WebCodingDev26Backend.model.Notification;
 import com.FBLA.WebCodingDev26Backend.model.Rating;
 import com.FBLA.WebCodingDev26Backend.service.AuthService;
+import com.FBLA.WebCodingDev26Backend.service.DemoAuthorizationService;
 import com.FBLA.WebCodingDev26Backend.service.FoundItemService;
 import com.FBLA.WebCodingDev26Backend.service.GenericEntityService;
 import com.FBLA.WebCodingDev26Backend.service.HealthService;
@@ -70,6 +72,8 @@ class ApiIntegrationTests {
     private UploadService uploadService;
     @Mock
     private MatchmakingService matchmakingService;
+    @Mock
+    private DemoAuthorizationService authorizationService;
 
     private MockMvc mockMvc;
 
@@ -79,6 +83,7 @@ class ApiIntegrationTests {
                 .standaloneSetup(
                         new HealthController(healthService),
                         new FoundItemController(foundItemService),
+                        new AdminFoundItemController(foundItemService, authorizationService),
                         new GenericEntityController(genericEntityService),
                         new MatchmakingController(matchmakingService),
                         new AuthController(authService),
@@ -105,6 +110,12 @@ class ApiIntegrationTests {
     }
 
     @Test
+    void missingRouteReturnsNotFound() throws Exception {
+        mockMvc.perform(get("/api/not-a-real-route"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void corsAllowsLocalFrontendOrigins() throws Exception {
         mockMvc.perform(options("/api/health")
                         .header("Origin", "http://localhost:5173")
@@ -121,7 +132,7 @@ class ApiIntegrationTests {
 
     @Test
     void seedDataShapeIsAvailableThroughApiLists() throws Exception {
-        when(foundItemService.list()).thenReturn(List.of(foundItem("found_001"), foundItem("found_002")));
+        when(foundItemService.list()).thenReturn(List.of(publicItem("found_001"), publicItem("found_002")));
         doReturn(List.of(lostReport("lost_001"))).when(genericEntityService).list("LostReport");
         doReturn(List.of(claim("claim_001"))).when(genericEntityService).list("Claim");
         doReturn(List.of(notification("notif_001"))).when(genericEntityService).list("Notification");
@@ -168,7 +179,7 @@ class ApiIntegrationTests {
         rating.setRating(5);
         ratedItem.setRatings(new ArrayList<>(List.of(rating)));
 
-        when(foundItemService.list()).thenReturn(List.of(foundItem("found_001"), foundItem("found_002")));
+        when(foundItemService.list()).thenReturn(List.of(publicItem("found_001"), publicItem("found_002")));
         when(foundItemService.create(any())).thenReturn(testItem);
         when(foundItemService.update(eq("found_test"), any()))
                 .thenReturn(approvedItem)
@@ -222,6 +233,22 @@ class ApiIntegrationTests {
         mockMvc.perform(delete("/api/items/found_test"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true));
+    }
+
+    @Test
+    void adminItemRouteReturnsFullModerationRecords() throws Exception {
+        FoundItem adminItem = foundItem("found_admin");
+        adminItem.setStorageLocation("Main Office shelf A");
+
+        when(authorizationService.requireAdmin("avery.patel@pleasantvalley.edu"))
+                .thenReturn(user("user_admin", "Avery Patel", "avery.patel@pleasantvalley.edu", "admin"));
+        when(foundItemService.listAdmin()).thenReturn(List.of(adminItem));
+
+        mockMvc.perform(get("/api/admin/items")
+                        .header("X-Demo-User-Email", "avery.patel@pleasantvalley.edu"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value("found_admin"))
+                .andExpect(jsonPath("$[0].storage_location").value("Main Office shelf A"));
     }
 
     @Test
@@ -384,6 +411,10 @@ class ApiIntegrationTests {
         item.setTags(new ArrayList<>());
         item.setRatings(new ArrayList<>());
         return item;
+    }
+
+    private PublicFoundItemResponse publicItem(String id) {
+        return PublicFoundItemResponse.from(foundItem(id));
     }
 
     private LostReport lostReport(String id) {

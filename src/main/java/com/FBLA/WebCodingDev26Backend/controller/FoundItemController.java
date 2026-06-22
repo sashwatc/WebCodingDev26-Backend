@@ -1,5 +1,6 @@
 package com.FBLA.WebCodingDev26Backend.controller;
 
+import com.FBLA.WebCodingDev26Backend.dto.PublicFoundItemResponse;
 import com.FBLA.WebCodingDev26Backend.model.FoundItem;
 import com.FBLA.WebCodingDev26Backend.service.FoundItemService;
 import java.util.List;
@@ -25,8 +26,13 @@ public class FoundItemController {
     }
 
     @GetMapping
-    public List<FoundItem> list() {
+    public List<PublicFoundItemResponse> list() {
         return service.list();
+    }
+
+    @GetMapping("/{id}")
+    public PublicFoundItemResponse get(@PathVariable String id) {
+        return service.getPublic(id);
     }
 
     @PostMapping

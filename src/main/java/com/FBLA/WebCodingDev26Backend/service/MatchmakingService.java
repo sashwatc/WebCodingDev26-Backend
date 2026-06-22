@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -33,6 +34,7 @@ public class MatchmakingService {
     private final ClockService clock;
     private final int maxCandidates;
     private final int minConfidence;
+    private final RecoveryCaseService recoveryCaseService;
 
     public MatchmakingService(
             LostReportRepository lostReports,
@@ -42,12 +44,26 @@ public class MatchmakingService {
             @Value("${app.ai.matchmaking.max-candidates:8}") int maxCandidates,
             @Value("${app.ai.matchmaking.min-confidence:35}") int minConfidence
     ) {
+        this(lostReports, foundItems, aiMatchClient, clock, maxCandidates, minConfidence, null);
+    }
+
+    @Autowired
+    public MatchmakingService(
+            LostReportRepository lostReports,
+            FoundItemRepository foundItems,
+            AiMatchClient aiMatchClient,
+            ClockService clock,
+            @Value("${app.ai.matchmaking.max-candidates:8}") int maxCandidates,
+            @Value("${app.ai.matchmaking.min-confidence:35}") int minConfidence,
+            RecoveryCaseService recoveryCaseService
+    ) {
         this.lostReports = lostReports;
         this.foundItems = foundItems;
         this.aiMatchClient = aiMatchClient;
         this.clock = clock;
         this.maxCandidates = Math.max(1, maxCandidates);
         this.minConfidence = Math.max(0, Math.min(100, minConfidence));
+        this.recoveryCaseService = recoveryCaseService;
     }
 
     public List<MatchSuggestion> getMatchesForLostReport(String lostReportId) {
@@ -66,6 +82,9 @@ public class MatchmakingService {
         report.setMatchedItems(new ArrayList<>(matches));
         report.setUpdatedDate(clock.now());
         lostReports.save(report);
+        if (!matches.isEmpty() && recoveryCaseService != null) {
+            recoveryCaseService.refreshForLostReport(lostReportId);
+        }
         return matches;
     }
 
@@ -86,6 +105,9 @@ public class MatchmakingService {
                 mergeMatches(report, matches);
                 report.setUpdatedDate(clock.now());
                 lostReports.save(report);
+                if (recoveryCaseService != null) {
+                    recoveryCaseService.refreshForLostReport(report.getId());
+                }
                 impacted.addAll(matches);
             }
         }
@@ -246,7 +268,7 @@ public class MatchmakingService {
 
     private boolean eligibleFoundItem(FoundItem item) {
         String status = normalize(item.getStatus());
-        return status.isBlank() || !TERMINAL_FOUND_STATUSES.contains(status);
+        return !Boolean.TRUE.equals(item.getRestrictedVisibility()) && (status.isBlank() || !TERMINAL_FOUND_STATUSES.contains(status));
     }
 
     private boolean eligibleLostReport(LostReport report) {

@@ -1,18 +1,37 @@
 package com.FBLA.WebCodingDev26Backend.config;
 
 import com.FBLA.WebCodingDev26Backend.model.AppUser;
+import com.FBLA.WebCodingDev26Backend.model.AssetRegistryRecord;
 import com.FBLA.WebCodingDev26Backend.model.AuditLog;
+import com.FBLA.WebCodingDev26Backend.model.CampusZone;
 import com.FBLA.WebCodingDev26Backend.model.Claim;
+import com.FBLA.WebCodingDev26Backend.model.EventRecoveryHub;
 import com.FBLA.WebCodingDev26Backend.model.FoundItem;
 import com.FBLA.WebCodingDev26Backend.model.LostReport;
 import com.FBLA.WebCodingDev26Backend.model.MatchSuggestion;
 import com.FBLA.WebCodingDev26Backend.model.Notification;
+import com.FBLA.WebCodingDev26Backend.model.PartnerRelay;
+import com.FBLA.WebCodingDev26Backend.model.PreventionAlert;
+import com.FBLA.WebCodingDev26Backend.model.RecoveryCase;
+import com.FBLA.WebCodingDev26Backend.model.RecoveryMission;
+import com.FBLA.WebCodingDev26Backend.model.RecoveryNode;
+import com.FBLA.WebCodingDev26Backend.model.ReturnPass;
 import com.FBLA.WebCodingDev26Backend.repository.AppUserRepository;
+import com.FBLA.WebCodingDev26Backend.repository.AssetRegistryRecordRepository;
 import com.FBLA.WebCodingDev26Backend.repository.AuditLogRepository;
+import com.FBLA.WebCodingDev26Backend.repository.CampusZoneRepository;
 import com.FBLA.WebCodingDev26Backend.repository.ClaimRepository;
+import com.FBLA.WebCodingDev26Backend.repository.EventRecoveryHubRepository;
 import com.FBLA.WebCodingDev26Backend.repository.FoundItemRepository;
 import com.FBLA.WebCodingDev26Backend.repository.LostReportRepository;
 import com.FBLA.WebCodingDev26Backend.repository.NotificationRepository;
+import com.FBLA.WebCodingDev26Backend.repository.PartnerRelayRepository;
+import com.FBLA.WebCodingDev26Backend.repository.PreventionAlertRepository;
+import com.FBLA.WebCodingDev26Backend.repository.RecoveryCaseRepository;
+import com.FBLA.WebCodingDev26Backend.repository.RecoveryMissionRepository;
+import com.FBLA.WebCodingDev26Backend.repository.RecoveryNodeRepository;
+import com.FBLA.WebCodingDev26Backend.repository.ReturnPassRepository;
+import com.FBLA.WebCodingDev26Backend.service.CustodyLedgerService;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,6 +44,7 @@ import org.springframework.dao.DataAccessException;
 @Configuration
 public class SeedDataConfig {
     private static final Logger LOGGER = LoggerFactory.getLogger(SeedDataConfig.class);
+    private static final String NOW = "2026-03-10T10:00:00Z";
 
     @Bean
     CommandLineRunner seedData(
@@ -34,7 +54,69 @@ public class SeedDataConfig {
             NotificationRepository notifications,
             AuditLogRepository auditLogs,
             AppUserRepository users,
+            CampusZoneRepository campusZones,
+            EventRecoveryHubRepository eventHubs,
+            AssetRegistryRecordRepository assetRecords,
+            RecoveryCaseRepository recoveryCases,
+            RecoveryMissionRepository recoveryMissions,
+            ReturnPassRepository returnPasses,
+            PreventionAlertRepository preventionAlerts,
+            RecoveryNodeRepository recoveryNodes,
+            PartnerRelayRepository partnerRelays,
+            CustodyLedgerService custodyLedgerService,
             @Value("${app.seed.enabled}") boolean seedEnabled
+    ) {
+        return seedDataRunner(
+                foundItems,
+                lostReports,
+                claims,
+                notifications,
+                auditLogs,
+                users,
+                campusZones,
+                eventHubs,
+                assetRecords,
+                recoveryCases,
+                recoveryMissions,
+                returnPasses,
+                preventionAlerts,
+                recoveryNodes,
+                partnerRelays,
+                custodyLedgerService,
+                seedEnabled
+        );
+    }
+
+    CommandLineRunner seedData(
+            FoundItemRepository foundItems,
+            LostReportRepository lostReports,
+            ClaimRepository claims,
+            NotificationRepository notifications,
+            AuditLogRepository auditLogs,
+            AppUserRepository users,
+            boolean seedEnabled
+    ) {
+        return seedDataRunner(foundItems, lostReports, claims, notifications, auditLogs, users, null, null, null, null, null, null, null, null, null, null, seedEnabled);
+    }
+
+    private CommandLineRunner seedDataRunner(
+            FoundItemRepository foundItems,
+            LostReportRepository lostReports,
+            ClaimRepository claims,
+            NotificationRepository notifications,
+            AuditLogRepository auditLogs,
+            AppUserRepository users,
+            CampusZoneRepository campusZones,
+            EventRecoveryHubRepository eventHubs,
+            AssetRegistryRecordRepository assetRecords,
+            RecoveryCaseRepository recoveryCases,
+            RecoveryMissionRepository recoveryMissions,
+            ReturnPassRepository returnPasses,
+            PreventionAlertRepository preventionAlerts,
+            RecoveryNodeRepository recoveryNodes,
+            PartnerRelayRepository partnerRelays,
+            CustodyLedgerService custodyLedgerService,
+            boolean seedEnabled
     ) {
         return args -> {
             if (!seedEnabled) {
@@ -46,130 +128,253 @@ public class SeedDataConfig {
                     return;
                 }
 
-                FoundItem bottle = foundItem(
-                        "found_001",
-                        "Black Hydro Flask Water Bottle",
-                        "food_containers",
-                        "Matte black Hydro Flask bottle with a top carry handle and screw cap.",
-                        "Black",
-                        "Hydro Flask",
-                        "Gymnasium",
-                        "2026-03-11",
-                        "12:15",
-                        "approved",
-                        "FB-2026-HF82"
-                );
-                bottle.setPhotoUrls(List.of("/items/black-hydro-flask.jpg"));
-                bottle.setTags(List.of("water bottle", "hydro flask", "black", "gym"));
-                bottle.setStorageLocation("Main Office shelf B2");
-                bottle.setFinderName("Coach Miller");
-                bottle.setFinderEmail("coach.miller@pleasantvalley.edu");
-                bottle.setFinderRole("staff");
-                bottle.setPriority("medium");
-                bottle.setCondition("good");
-                bottle.setAiDescription("A matte black Hydro Flask water bottle with a top handle and white logo.");
-                bottle.setDistinguishingFeatures("Large black bottle with white Hydro Flask logo and top handle");
+                seedZones(campusZones);
+                seedAssets(assetRecords);
+                seedEvent(eventHubs);
+                seedItems(foundItems);
+                seedLostReports(lostReports);
+                seedClaims(claims);
+                seedRecovery(recoveryCases, recoveryMissions);
+                seedPasses(returnPasses);
+                seedSentinel(preventionAlerts);
+                seedRelay(recoveryNodes, partnerRelays);
+                seedCustody(custodyLedgerService);
 
-                FoundItem backpack = foundItem(
-                        "found_002",
-                        "Blue JanSport Backpack",
-                        "bags_cases",
-                        "Royal blue JanSport backpack with math notebook and tennis keychain.",
-                        "Blue",
-                        "JanSport",
-                        "Student Lounge",
-                        "2026-03-09",
-                        "15:05",
-                        "claimed",
-                        "FB-2026-JS27"
-                );
-                backpack.setPhotoUrls(List.of("/images/blue-backpack.png"));
-                backpack.setTags(List.of("backpack", "jansport", "blue", "student lounge"));
-                backpack.setStorageLocation("Counselor office storage closet");
-                backpack.setFinderName("Jamie Lopez");
-                backpack.setFinderEmail("jamie.lopez@pleasantvalley.edu");
-                backpack.setFinderRole("student");
-                backpack.setPriority("medium");
-                backpack.setCondition("fair");
-
-                foundItems.saveAll(List.of(bottle, backpack));
-
-                LostReport report = new LostReport();
-                report.setId("lost_001");
-                report.setTitle("Missing blue backpack");
-                report.setCategory("bags_cases");
-                report.setDescription("Blue JanSport backpack with a tennis keychain.");
-                report.setColor("Blue");
-                report.setBrand("JanSport");
-                report.setLocationLost("Student Lounge");
-                report.setDateLost("2026-03-09");
-                report.setContactName("Jordan Kim");
-                report.setContactEmail("jordan.kim@pleasantvalley.edu");
-                report.setStatus("open");
-                report.setUrgency("medium");
-                MatchSuggestion backpackMatch = new MatchSuggestion();
-                backpackMatch.setFoundItemId("found_002");
-                backpackMatch.setFoundItemTitle("Blue JanSport Backpack");
-                backpackMatch.setCategory("bags_cases");
-                backpackMatch.setColor("Blue");
-                backpackMatch.setBrand("JanSport");
-                backpackMatch.setLocationFound("Student Lounge");
-                backpackMatch.setDateFound("2026-03-09");
-                backpackMatch.setConfidence(96);
-                backpackMatch.setReasons(List.of("category match", "brand match", "color match", "location is similar"));
-                backpackMatch.setSource("seed");
-                backpackMatch.setStatus("suggested");
-                backpackMatch.setCreatedDate("2026-03-09T16:00:00Z");
-                backpackMatch.setUpdatedDate("2026-03-09T16:00:00Z");
-                backpackMatch.setPhotoUrls(List.of("/images/blue-backpack.png"));
-                report.setMatchedItems(List.of(backpackMatch));
-                report.setCreatedDate("2026-03-09T16:00:00Z");
-                report.setUpdatedDate("2026-03-09T16:00:00Z");
-                lostReports.save(report);
-
-                Claim claim = new Claim();
-                claim.setId("claim_001");
-                claim.setFoundItemId("found_002");
-                claim.setClaimantName("Jordan Kim");
-                claim.setClaimantEmail("jordan.kim@pleasantvalley.edu");
-                claim.setClaimReason("This matches my backpack and the tennis keychain inside.");
-                claim.setIdentifyingDetails("Green tennis racket keychain in the front pocket.");
-                claim.setStatus("approved");
-                claim.setRiskScore(12);
-                claim.setRiskFlags(List.of("sufficient detail provided"));
-                claim.setCreatedDate("2026-03-10T10:00:00Z");
-                claim.setUpdatedDate("2026-03-10T11:00:00Z");
-                claims.save(claim);
-
-                Notification notification = new Notification();
-                notification.setId("notif_001");
-                notification.setUserEmail("jordan.kim@pleasantvalley.edu");
-                notification.setTitle("Potential match found");
-                notification.setMessage("We found a possible match for your lost item report.");
-                notification.setType("match_found");
-                notification.setLink("/UserDashboard");
-                notification.setRelatedItemId("found_002");
-                notification.setIsRead(false);
-                notification.setCreatedDate("2026-03-10T10:15:00Z");
-                notification.setUpdatedDate("2026-03-10T10:15:00Z");
-                notifications.save(notification);
-
-                AuditLog auditLog = new AuditLog();
-                auditLog.setId("audit_001");
-                auditLog.setAction("Seed data created");
-                auditLog.setEntityType("system");
-                auditLog.setEntityId("seed");
-                auditLog.setPerformedBy("system");
-                auditLog.setDetails("Initial Lost Then Found demo records loaded.");
-                auditLog.setCreatedDate("2026-03-10T10:20:00Z");
-                auditLogs.save(auditLog);
-
+                notifications.save(notification("notif_001", "jordan.kim@pleasantvalley.edu", "Potential match found", "We found a possible match for your lost item report.", "match_found", "/UserDashboard", "found_002"));
+                auditLogs.save(auditLog());
                 users.save(user("user_001", "Jordan Kim", "jordan.kim@pleasantvalley.edu", "student"));
                 users.save(user("user_002", "Avery Patel", "avery.patel@pleasantvalley.edu", "admin"));
             } catch (DataAccessException exception) {
                 LOGGER.warn("Skipping seed data because MongoDB is unavailable: {}", exception.getMessage());
             }
         };
+    }
+
+    private void seedZones(CampusZoneRepository campusZones) {
+        if (campusZones == null) {
+            return;
+        }
+        campusZones.saveAll(List.of(
+                zone("zone_library", "Library Study Area"),
+                zone("zone_gym_entrance", "Gym Entrance"),
+                zone("zone_gym_bleachers", "Gym Bleachers"),
+                zone("zone_cafeteria", "Cafeteria"),
+                zone("zone_main_office", "Main Office"),
+                zone("zone_bus_loop", "Bus Loop"),
+                zone("zone_auditorium", "Auditorium"),
+                zone("zone_athletics", "Athletics Office")
+        ));
+    }
+
+    private void seedAssets(AssetRegistryRecordRepository assetRecords) {
+        if (assetRecords == null) {
+            return;
+        }
+        assetRecords.saveAll(List.of(
+                asset("asset_cb_1042", "PVHS-CB-1042", "Chromebook", "Technology Office"),
+                asset("asset_book_8821", "LIB-BOOK-8821", "Library Book", "Library Return Desk"),
+                asset("asset_cam_027", "ATH-CAM-027", "Camera", "Athletics Office"),
+                asset("asset_band_008", "BAND-INST-008", "Instrument", "Fine Arts Office")
+        ));
+    }
+
+    private void seedEvent(EventRecoveryHubRepository eventHubs) {
+        if (eventHubs == null) {
+            return;
+        }
+        EventRecoveryHub hub = new EventRecoveryHub();
+        hub.setId("hub_basketball_game");
+        hub.setTenantId("pvhs");
+        hub.setName("PVHS vs. Bettendorf Basketball Game");
+        hub.setDescription("Demo integration-ready recovery hub for a high-traffic campus event.");
+        hub.setEventType("athletics");
+        hub.setStartTime("2026-03-14T18:00:00Z");
+        hub.setEndTime("2026-03-14T21:00:00Z");
+        hub.setStatus("active");
+        hub.setCampusZoneIds(List.of("zone_gym_entrance", "zone_gym_bleachers", "zone_athletics"));
+        hub.setPublicEnabled(true);
+        hub.setDisplayEnabled(true);
+        hub.setCreatedBy("avery.patel@pleasantvalley.edu");
+        hub.setCreatedDate(NOW);
+        hub.setUpdatedDate(NOW);
+        eventHubs.save(hub);
+    }
+
+    private void seedItems(FoundItemRepository foundItems) {
+        FoundItem bottle = foundItem("found_001", "Black Hydro Flask Water Bottle", "food_containers", "Matte black Hydro Flask bottle with a top carry handle and screw cap.", "Black", "Hydro Flask", "Gymnasium", "2026-03-11", "12:15", "approved", "FB-2026-HF82");
+        bottle.setPhotoUrls(List.of("/items/black-hydro-flask.jpg"));
+        bottle.setTags(List.of("water bottle", "hydro flask", "black", "gym"));
+        bottle.setStorageLocation("Main Office shelf B2");
+        bottle.setFinderName("Coach Miller");
+        bottle.setFinderEmail("coach.miller@pleasantvalley.edu");
+        bottle.setFinderRole("staff");
+
+        FoundItem backpack = foundItem("found_002", "Blue JanSport Backpack", "bags_cases", "Royal blue JanSport backpack with math notebook and tennis keychain.", "Blue", "JanSport", "Student Lounge", "2026-03-09", "15:05", "claimed", "FB-2026-JS27");
+        backpack.setPhotoUrls(List.of("/images/blue-backpack.png"));
+        backpack.setTags(List.of("backpack", "jansport", "blue", "student lounge"));
+        backpack.setStorageLocation("Counselor office storage closet");
+
+        FoundItem airpods = foundItem("found_airpods_game", "Black AirPods-style Case", "electronics", "Black wireless earbud case found after the basketball game.", "Black", "Apple", "Gym Bleachers", "2026-03-14", "20:40", "approved", "FB-2026-AP14");
+        airpods.setEventHubId("hub_basketball_game");
+        airpods.setCampusZoneId("zone_gym_bleachers");
+        airpods.setPhotoUrls(List.of("/items/black-airpods-case.jpg"));
+        airpods.setTags(List.of("airpods", "black", "earbuds", "gym bleachers"));
+        airpods.setPrivateVerificationClues(List.of("small silver initials on the hinge", "tiny scratch along the left back corner"));
+        airpods.setStorageLocation("Main Office sealed bin A1");
+
+        FoundItem passItem = foundItem("found_claimed_calculator", "Silver Graphing Calculator", "electronics", "TI-style graphing calculator found near the gym entrance.", "Silver", "Texas Instruments", "Gym Entrance", "2026-03-14", "19:30", "claimed", "FB-2026-CAL77");
+        passItem.setEventHubId("hub_basketball_game");
+        passItem.setCampusZoneId("zone_gym_entrance");
+        passItem.setPrivateVerificationClues(List.of("name label under the slide cover"));
+        passItem.setStorageLocation("Main Office pickup drawer");
+
+        FoundItem returned = foundItem("found_returned_lanyard", "PVHS Lanyard With Keys", "personal_items", "Blue PVHS lanyard with two keys.", "Blue", "PVHS", "Athletics Office", "2026-03-13", "17:20", "returned", "FB-2026-KEY22");
+        returned.setEventHubId("hub_basketball_game");
+        returned.setCampusZoneId("zone_athletics");
+        returned.setClaimConfirmed(true);
+        returned.setClaimConfirmedAt("2026-03-14T16:30:00Z");
+
+        FoundItem chromebook = foundItem("found_asset_chromebook", "PVHS Chromebook", "electronics", "School-owned Chromebook with asset tag.", "Gray", "Lenovo", "Library Study Area", "2026-03-12", "11:05", "approved", "FB-2026-CB1042");
+        chromebook.setAssetTag("PVHS-CB-1042");
+        chromebook.setAssetRecordId("asset_cb_1042");
+        chromebook.setDepartmentDestination("Technology Office");
+        chromebook.setRestrictedVisibility(true);
+        chromebook.setStorageLocation("Technology Office intake shelf");
+
+        foundItems.saveAll(List.of(bottle, backpack, airpods, passItem, returned, chromebook));
+    }
+
+    private void seedLostReports(LostReportRepository lostReports) {
+        LostReport report = lostReport("lost_001", "Missing blue backpack", "bags_cases", "Blue JanSport backpack with a tennis keychain.", "Blue", "JanSport", "Student Lounge", "2026-03-09", "jordan.kim@pleasantvalley.edu");
+        report.setMatchedItems(List.of(match("found_002", "Blue JanSport Backpack", 96)));
+        lostReports.save(report);
+
+        LostReport airpods = lostReport("lost_airpods_game", "Lost black AirPods-style case", "electronics", "Black earbud case lost during the PVHS vs. Bettendorf game.", "Black", "Apple", "Gym Bleachers", "2026-03-14", "mia.rodriguez@pleasantvalley.edu");
+        airpods.setEventHubId("hub_basketball_game");
+        airpods.setCampusZoneId("zone_gym_bleachers");
+        airpods.setUrgency("high");
+        airpods.setMatchedItems(List.of(match("found_airpods_game", "Black AirPods-style Case", 94)));
+        lostReports.save(airpods);
+    }
+
+    private void seedClaims(ClaimRepository claims) {
+        Claim claim = claim("claim_001", "found_002", "Jordan Kim", "jordan.kim@pleasantvalley.edu", "approved");
+        claims.save(claim);
+
+        Claim review = claim("claim_airpods_review", "found_airpods_game", "Mia Rodriguez", "mia.rodriguez@pleasantvalley.edu", "pending_review");
+        review.setEvidenceChecklist(List.of("hidden mark", "case condition", "last known location"));
+        review.setPrivateEvidenceResponses(java.util.Map.of("hidden_mark", "silver initials on the hinge", "condition", "scratch on the back corner"));
+        review.setIdentifyingDetails("It has my small silver initials and a scratch on the back left corner.");
+        review.setVerificationScore(88);
+        review.setVerificationFlags(List.of("strong overlap", "proof photo supplied"));
+        review.setVerificationSummary("Claim evidence strongly overlaps with sealed verification clues. Staff review is still required.");
+        claims.save(review);
+
+        Claim approved = claim("claim_calculator_approved", "found_claimed_calculator", "Riley Chen", "riley.chen@pleasantvalley.edu", "approved");
+        approved.setIdentifyingDetails("Name label under the slide cover.");
+        claims.save(approved);
+
+        Claim completed = claim("claim_keys_completed", "found_returned_lanyard", "Avery Brooks", "avery.brooks@pleasantvalley.edu", "completed");
+        completed.setReceivedConfirmedAt("2026-03-14T16:30:00Z");
+        claims.save(completed);
+    }
+
+    private void seedRecovery(RecoveryCaseRepository recoveryCases, RecoveryMissionRepository recoveryMissions) {
+        if (recoveryCases == null || recoveryMissions == null) {
+            return;
+        }
+        RecoveryCase recoveryCase = new RecoveryCase();
+        recoveryCase.setId("case_airpods_game");
+        recoveryCase.setCaseCode("PVHS-RM-20260314-AIRP");
+        recoveryCase.setTenantId("pvhs");
+        recoveryCase.setLostReportId("lost_airpods_game");
+        recoveryCase.setSelectedFoundItemId("found_airpods_game");
+        recoveryCase.setLinkedClaimId("claim_airpods_review");
+        recoveryCase.setEventHubId("hub_basketball_game");
+        recoveryCase.setCampusZoneId("zone_gym_bleachers");
+        recoveryCase.setStatus("claim_in_review");
+        recoveryCase.setPriority("high");
+        recoveryCase.setAssignedTo("avery.patel@pleasantvalley.edu");
+        recoveryCase.setSummary("Lost black AirPods-style case from the basketball game.");
+        recoveryCase.setRecoveryPlan("Likely Recovery Zones\n1. Gym Bleachers - 86%\n2. Gym Entrance - 61%\n3. Athletics Office - 35%\n\nWhy:\n- Last seen near gym\n- Similar electronics were found nearby\n- Event workflow is active");
+        recoveryCase.setLikelyZoneSummaries(List.of("Gym Bleachers - 86%", "Gym Entrance - 61%", "Athletics Office - 35%"));
+        recoveryCase.setCreatedDate(NOW);
+        recoveryCase.setUpdatedDate(NOW);
+        recoveryCases.save(recoveryCase);
+
+        recoveryMissions.save(mission("mission_bleachers", "case_airpods_game", "zone_gym_bleachers", "Gym Bleachers", 86, "high", "open"));
+        recoveryMissions.save(mission("mission_entrance", "case_airpods_game", "zone_gym_entrance", "Gym Entrance", 61, "medium", "checked"));
+    }
+
+    private void seedPasses(ReturnPassRepository returnPasses) {
+        if (returnPasses == null) {
+            return;
+        }
+        ReturnPass active = pass("pass_calculator_active", "claim_calculator_approved", "found_claimed_calculator", "riley.chen@pleasantvalley.edu", "active", "314159");
+        returnPasses.save(active);
+        ReturnPass redeemed = pass("pass_keys_redeemed", "claim_keys_completed", "found_returned_lanyard", "avery.brooks@pleasantvalley.edu", "redeemed", "271828");
+        redeemed.setRedeemedAt("2026-03-14T16:30:00Z");
+        redeemed.setRedeemedBy("avery.patel@pleasantvalley.edu");
+        returnPasses.save(redeemed);
+    }
+
+    private void seedSentinel(PreventionAlertRepository preventionAlerts) {
+        if (preventionAlerts == null) {
+            return;
+        }
+        PreventionAlert alert = new PreventionAlert();
+        alert.setId("alert_gym_electronics");
+        alert.setTenantId("pvhs");
+        alert.setTitle("Unusual increase detected");
+        alert.setAlertType("volume_spike");
+        alert.setSeverity("high");
+        alert.setCampusZoneId("zone_gym_bleachers");
+        alert.setCategory("electronics");
+        alert.setTimeWindowStart("2026-03-14T18:00:00Z");
+        alert.setTimeWindowEnd("2026-03-14T21:00:00Z");
+        alert.setBaselineCount(2);
+        alert.setObservedCount(6);
+        alert.setReasons(List.of("6 electronics reports near the gym within 90 minutes after Friday practice.", "Observed volume is at least 2x the recent baseline."));
+        alert.setSuggestedActions(List.of("Check bleachers and benches", "Create recovery mission", "Post reminder at gym exit"));
+        alert.setStatus("open");
+        alert.setCreatedDate(NOW);
+        preventionAlerts.save(alert);
+    }
+
+    private void seedRelay(RecoveryNodeRepository recoveryNodes, PartnerRelayRepository partnerRelays) {
+        if (recoveryNodes == null || partnerRelays == null) {
+            return;
+        }
+        recoveryNodes.saveAll(List.of(
+                node("node_main_office", "PVHS Main Office"),
+                node("node_athletics", "PVHS Athletics"),
+                node("node_transportation", "PVHS Transportation"),
+                node("node_fine_arts", "PVHS Fine Arts")
+        ));
+        PartnerRelay relay = new PartnerRelay();
+        relay.setId("relay_airpods_athletics");
+        relay.setSourceNodeId("node_main_office");
+        relay.setTargetNodeId("node_athletics");
+        relay.setRecoveryCaseId("case_airpods_game");
+        relay.setFoundItemId("found_airpods_game");
+        relay.setStatus("awaiting_verification");
+        relay.setPublicSummary("A possible match may be available at a partner location. Submit ownership evidence to continue.");
+        relay.setRedactedMatchReasons(List.of("Category and color overlap", "Event zone context overlaps"));
+        relay.setCreatedDate(NOW);
+        relay.setUpdatedDate(NOW);
+        partnerRelays.save(relay);
+    }
+
+    private void seedCustody(CustodyLedgerService custodyLedgerService) {
+        if (custodyLedgerService == null) {
+            return;
+        }
+        custodyLedgerService.appendEvent("found_airpods_game", "intake_created", "coach.miller@pleasantvalley.edu", "staff", "Main Office sealed bin A1", "Event item intake created.", null);
+        custodyLedgerService.appendEvent("found_airpods_game", "reviewed", "avery.patel@pleasantvalley.edu", "admin", "Main Office sealed bin A1", "Proof Vault clues sealed.", null);
+        custodyLedgerService.appendEvent("found_airpods_game", "matched", "system@pvhs.demo", "system", "", "Advisory match linked to lost report.", null);
+        custodyLedgerService.appendEvent("found_claimed_calculator", "pickup_ready", "avery.patel@pleasantvalley.edu", "admin", "PVHS Main Office pickup station", "Active Return Pass available.", null);
+        custodyLedgerService.appendEvent("found_returned_lanyard", "handoff_verified", "avery.patel@pleasantvalley.edu", "admin", "PVHS Main Office pickup station", "Manual code verified.", null);
+        custodyLedgerService.appendEvent("found_returned_lanyard", "returned", "avery.patel@pleasantvalley.edu", "admin", "PVHS Main Office pickup station", "Item returned to verified claimant.", null);
     }
 
     private FoundItem foundItem(String id, String title, String category, String description, String color, String brand,
@@ -189,9 +394,153 @@ public class SeedDataConfig {
         item.setItemCode(itemCode);
         item.setIsFlagged(false);
         item.setClaimConfirmed(false);
-        item.setCreatedDate("2026-03-10T10:00:00Z");
-        item.setUpdatedDate("2026-03-10T10:00:00Z");
+        item.setRestrictedVisibility(false);
+        item.setCreatedDate(NOW);
+        item.setUpdatedDate(NOW);
         return item;
+    }
+
+    private LostReport lostReport(String id, String title, String category, String description, String color, String brand, String location, String date, String email) {
+        LostReport report = new LostReport();
+        report.setId(id);
+        report.setTitle(title);
+        report.setCategory(category);
+        report.setDescription(description);
+        report.setColor(color);
+        report.setBrand(brand);
+        report.setLocationLost(location);
+        report.setDateLost(date);
+        report.setContactName("Demo Student");
+        report.setContactEmail(email);
+        report.setStatus("open");
+        report.setUrgency("medium");
+        report.setCreatedDate(NOW);
+        report.setUpdatedDate(NOW);
+        return report;
+    }
+
+    private MatchSuggestion match(String itemId, String title, int confidence) {
+        MatchSuggestion suggestion = new MatchSuggestion();
+        suggestion.setFoundItemId(itemId);
+        suggestion.setFoundItemTitle(title);
+        suggestion.setConfidence(confidence);
+        suggestion.setReasons(List.of("category match", "color match", "location is similar"));
+        suggestion.setSource("seed");
+        suggestion.setStatus("suggested");
+        suggestion.setCreatedDate(NOW);
+        suggestion.setUpdatedDate(NOW);
+        return suggestion;
+    }
+
+    private Claim claim(String id, String itemId, String name, String email, String status) {
+        Claim claim = new Claim();
+        claim.setId(id);
+        claim.setFoundItemId(itemId);
+        claim.setClaimantName(name);
+        claim.setClaimantEmail(email);
+        claim.setClaimReason("Seeded demo claim for PVHS Recovery Mesh.");
+        claim.setIdentifyingDetails("Seeded identifying details.");
+        claim.setStatus(status);
+        claim.setRiskScore(10);
+        claim.setRiskFlags(List.of("demo record"));
+        claim.setCreatedDate(NOW);
+        claim.setUpdatedDate(NOW);
+        return claim;
+    }
+
+    private ReturnPass pass(String id, String claimId, String itemId, String email, String status, String code) {
+        ReturnPass pass = new ReturnPass();
+        pass.setId(id);
+        pass.setClaimId(claimId);
+        pass.setFoundItemId(itemId);
+        pass.setClaimantEmail(email);
+        pass.setPickupWindow("Next school day during office hours");
+        pass.setPickupLocation("PVHS Main Office pickup station");
+        pass.setStatus(status);
+        pass.setOneTimeCode(code);
+        pass.setToken("seeded-demo-token-not-public");
+        pass.setExpiresAt("2026-12-31T23:59:00Z");
+        pass.setCreatedDate(NOW);
+        pass.setUpdatedDate(NOW);
+        return pass;
+    }
+
+    private RecoveryMission mission(String id, String caseId, String zoneId, String zoneLabel, int score, String priority, String status) {
+        RecoveryMission mission = new RecoveryMission();
+        mission.setId(id);
+        mission.setRecoveryCaseId(caseId);
+        mission.setEventHubId("hub_basketball_game");
+        mission.setCampusZoneId(zoneId);
+        mission.setZoneLabel(zoneLabel);
+        mission.setTitle("Check " + zoneLabel);
+        mission.setRecommendedAction("Staff should check this zone and compare any found item with the lost report.");
+        mission.setReasons(List.of("Last seen near gym", "Event workflow is active"));
+        mission.setScore(score);
+        mission.setPriority(priority);
+        mission.setStatus(status);
+        mission.setCreatedDate(NOW);
+        mission.setUpdatedDate(NOW);
+        return mission;
+    }
+
+    private CampusZone zone(String id, String label) {
+        CampusZone zone = new CampusZone();
+        zone.setId(id);
+        zone.setLabel(label);
+        zone.setDescription("Seeded PVHS campus recovery zone.");
+        zone.setCreatedDate(NOW);
+        zone.setUpdatedDate(NOW);
+        return zone;
+    }
+
+    private AssetRegistryRecord asset(String id, String tag, String type, String destination) {
+        AssetRegistryRecord asset = new AssetRegistryRecord();
+        asset.setId(id);
+        asset.setAssetTag(tag);
+        asset.setAssetType(type);
+        asset.setDepartmentDestination(destination);
+        asset.setStatus("active");
+        asset.setCreatedDate(NOW);
+        asset.setUpdatedDate(NOW);
+        return asset;
+    }
+
+    private RecoveryNode node(String id, String name) {
+        RecoveryNode node = new RecoveryNode();
+        node.setId(id);
+        node.setName(name);
+        node.setNodeType("demo_partner");
+        node.setStatus("active");
+        node.setCreatedDate(NOW);
+        node.setUpdatedDate(NOW);
+        return node;
+    }
+
+    private Notification notification(String id, String email, String title, String message, String type, String link, String itemId) {
+        Notification notification = new Notification();
+        notification.setId(id);
+        notification.setUserEmail(email);
+        notification.setTitle(title);
+        notification.setMessage(message);
+        notification.setType(type);
+        notification.setLink(link);
+        notification.setRelatedItemId(itemId);
+        notification.setIsRead(false);
+        notification.setCreatedDate(NOW);
+        notification.setUpdatedDate(NOW);
+        return notification;
+    }
+
+    private AuditLog auditLog() {
+        AuditLog auditLog = new AuditLog();
+        auditLog.setId("audit_001");
+        auditLog.setAction("Seed data created");
+        auditLog.setEntityType("system");
+        auditLog.setEntityId("seed");
+        auditLog.setPerformedBy("system");
+        auditLog.setDetails("PVHS Recovery Mesh NLC demo records loaded.");
+        auditLog.setCreatedDate(NOW);
+        return auditLog;
     }
 
     private AppUser user(String id, String fullName, String email, String role) {
@@ -201,8 +550,8 @@ public class SeedDataConfig {
         user.setEmail(email);
         user.setRole(role);
         user.setAvatarUrl("");
-        user.setCreatedDate("2026-03-10T10:00:00Z");
-        user.setUpdatedDate("2026-03-10T10:00:00Z");
+        user.setCreatedDate(NOW);
+        user.setUpdatedDate(NOW);
         return user;
     }
 }

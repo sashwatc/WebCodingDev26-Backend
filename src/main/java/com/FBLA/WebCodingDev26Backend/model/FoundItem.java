@@ -35,6 +35,13 @@ public class FoundItem {
     private Boolean isFlagged;
     private Boolean claimConfirmed;
     private String claimConfirmedAt;
+    private List<String> privateVerificationClues = new ArrayList<>();
+    private Boolean restrictedVisibility;
+    private String assetTag;
+    private String assetRecordId;
+    private String departmentDestination;
+    private String eventHubId;
+    private String campusZoneId;
 
     private List<String> photoUrls = new ArrayList<>();
 
@@ -96,6 +103,20 @@ public class FoundItem {
     public void setClaimConfirmed(Boolean claimConfirmed) { this.claimConfirmed = claimConfirmed; }
     public String getClaimConfirmedAt() { return claimConfirmedAt; }
     public void setClaimConfirmedAt(String claimConfirmedAt) { this.claimConfirmedAt = claimConfirmedAt; }
+    public List<String> getPrivateVerificationClues() { return privateVerificationClues; }
+    public void setPrivateVerificationClues(List<String> privateVerificationClues) { this.privateVerificationClues = privateVerificationClues == null ? new ArrayList<>() : privateVerificationClues; }
+    public Boolean getRestrictedVisibility() { return restrictedVisibility; }
+    public void setRestrictedVisibility(Boolean restrictedVisibility) { this.restrictedVisibility = restrictedVisibility; }
+    public String getAssetTag() { return assetTag; }
+    public void setAssetTag(String assetTag) { this.assetTag = assetTag; }
+    public String getAssetRecordId() { return assetRecordId; }
+    public void setAssetRecordId(String assetRecordId) { this.assetRecordId = assetRecordId; }
+    public String getDepartmentDestination() { return departmentDestination; }
+    public void setDepartmentDestination(String departmentDestination) { this.departmentDestination = departmentDestination; }
+    public String getEventHubId() { return eventHubId; }
+    public void setEventHubId(String eventHubId) { this.eventHubId = eventHubId; }
+    public String getCampusZoneId() { return campusZoneId; }
+    public void setCampusZoneId(String campusZoneId) { this.campusZoneId = campusZoneId; }
     public List<String> getPhotoUrls() { return photoUrls; }
     public void setPhotoUrls(List<String> photoUrls) { this.photoUrls = photoUrls == null ? new ArrayList<>() : photoUrls; }
     public List<String> getTags() { return tags; }

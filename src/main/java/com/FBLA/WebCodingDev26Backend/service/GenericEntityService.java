@@ -1,5 +1,6 @@
 package com.FBLA.WebCodingDev26Backend.service;
 
+import com.FBLA.WebCodingDev26Backend.exception.ConflictException;
 import com.FBLA.WebCodingDev26Backend.exception.NotFoundException;
 import com.FBLA.WebCodingDev26Backend.exception.UnsupportedEntityException;
 import com.FBLA.WebCodingDev26Backend.mapper.PatchMapper;
@@ -9,6 +10,7 @@ import com.FBLA.WebCodingDev26Backend.model.LostReport;
 import com.FBLA.WebCodingDev26Backend.model.Notification;
 import com.FBLA.WebCodingDev26Backend.repository.AuditLogRepository;
 import com.FBLA.WebCodingDev26Backend.repository.ClaimRepository;
+import com.FBLA.WebCodingDev26Backend.repository.FoundItemRepository;
 import com.FBLA.WebCodingDev26Backend.repository.LostReportRepository;
 import com.FBLA.WebCodingDev26Backend.repository.NotificationRepository;
 import java.util.List;
@@ -31,6 +33,9 @@ public class GenericEntityService {
     private final PatchMapper mapper;
     private final ClockService clock;
     private final MatchmakingService matchmakingService;
+    private final FoundItemRepository foundItems;
+    private final RecoveryCaseService recoveryCaseService;
+    private final CustodyLedgerService custodyLedgerService;
 
     public GenericEntityService(
             LostReportRepository lostReports,
@@ -40,7 +45,7 @@ public class GenericEntityService {
             PatchMapper mapper,
             ClockService clock
     ) {
-        this(lostReports, claims, notifications, auditLogs, mapper, clock, null);
+        this(lostReports, claims, notifications, auditLogs, mapper, clock, null, null, null, null);
     }
 
     @Autowired
@@ -51,7 +56,10 @@ public class GenericEntityService {
             AuditLogRepository auditLogs,
             PatchMapper mapper,
             ClockService clock,
-            MatchmakingService matchmakingService
+            MatchmakingService matchmakingService,
+            FoundItemRepository foundItems,
+            RecoveryCaseService recoveryCaseService,
+            CustodyLedgerService custodyLedgerService
     ) {
         this.lostReports = lostReports;
         this.claims = claims;
@@ -60,6 +68,9 @@ public class GenericEntityService {
         this.mapper = mapper;
         this.clock = clock;
         this.matchmakingService = matchmakingService;
+        this.foundItems = foundItems;
+        this.recoveryCaseService = recoveryCaseService;
+        this.custodyLedgerService = custodyLedgerService;
     }
 
     public List<?> list(String entityName) {
@@ -70,14 +81,30 @@ public class GenericEntityService {
         EntityAdapter<?> adapter = adapter(entityName);
         Object entity = mapper.convert(data, adapter.type());
         applyCreateDefaults(entity, adapter.prefix());
+        validateCreate(entity);
         Object saved = save(adapter, entity);
         if (saved instanceof LostReport lostReport && matchmakingService != null) {
             try {
+                if (recoveryCaseService != null) {
+                    recoveryCaseService.ensureForLostReport(lostReport);
+                }
                 matchmakingService.refreshMatchesForLostReport(lostReport.getId());
+                if (recoveryCaseService != null) {
+                    recoveryCaseService.refreshForLostReport(lostReport.getId());
+                }
                 return lostReports.findById(lostReport.getId()).orElse(lostReport);
             } catch (RuntimeException exception) {
                 LOGGER.warn("Unable to refresh matches for lost report {}: {}", lostReport.getId(), exception.getMessage());
             }
+        }
+        if (saved instanceof Claim claim && recoveryCaseService != null) {
+            recoveryCaseService.onClaimSubmitted(claim);
+        }
+        if (saved instanceof Claim claim) {
+            if (isTerminalClaimStatus(claim.getStatus())) {
+                markFoundItemForTerminalClaim(claim);
+            }
+            appendClaimCustodyEvent(claim, "claim_submitted");
         }
         return saved;
     }
@@ -87,8 +114,17 @@ public class GenericEntityService {
         Object existing = adapter.repository().findById(id).orElseThrow(() -> new NotFoundException(entityName + " not found"));
         Object patch = mapper.convert(data, adapter.type());
         mapper.copyPresent(data, patch, existing, "id", "createdDate");
+        validateUpdate(existing);
         applyUpdateTimestamp(existing);
-        return save(adapter, existing);
+        Object saved = save(adapter, existing);
+        if (saved instanceof Claim claim && recoveryCaseService != null) {
+            recoveryCaseService.onClaimSubmitted(claim);
+        }
+        if (saved instanceof Claim claim && isTerminalClaimStatus(claim.getStatus())) {
+            markFoundItemForTerminalClaim(claim);
+            appendClaimCustodyEvent(claim, "approved".equalsIgnoreCase(claim.getStatus()) ? "claim_approved" : "returned");
+        }
+        return saved;
     }
 
     public boolean delete(String entityName, String id) {
@@ -147,6 +183,86 @@ public class GenericEntityService {
         } else if (entity instanceof Notification notification) {
             notification.setUpdatedDate(clock.now());
         }
+    }
+
+    private void validateCreate(Object entity) {
+        if (entity instanceof Claim claim) {
+            validateClaimReferencesInventory(claim);
+            validateNoDuplicateTerminalClaim(claim);
+        }
+    }
+
+    private void validateUpdate(Object entity) {
+        if (entity instanceof Claim claim) {
+            validateClaimReferencesInventory(claim);
+            validateNoDuplicateTerminalClaim(claim);
+        }
+    }
+
+    private void validateClaimReferencesInventory(Claim claim) {
+        if (foundItems == null || claim.getFoundItemId() == null || claim.getFoundItemId().isBlank()) {
+            return;
+        }
+        if (!foundItems.existsById(claim.getFoundItemId())) {
+            throw new NotFoundException("Claims must reference an existing found item.");
+        }
+    }
+
+    private void validateNoDuplicateTerminalClaim(Claim claim) {
+        if (claim.getFoundItemId() == null || claim.getFoundItemId().isBlank() || !isTerminalClaimStatus(claim.getStatus())) {
+            return;
+        }
+        boolean duplicate = claims.findByFoundItemId(claim.getFoundItemId()).stream()
+                .anyMatch(existing -> !existing.getId().equals(claim.getId()) && isTerminalClaimStatus(existing.getStatus()));
+        if (duplicate) {
+            throw new ConflictException("Only one approved or completed claim is allowed for a found item.");
+        }
+    }
+
+    private boolean isTerminalClaimStatus(String status) {
+        return status != null && (status.equalsIgnoreCase("approved") || status.equalsIgnoreCase("completed"));
+    }
+
+    private void appendClaimCustodyEvent(Claim claim, String eventType) {
+        if (custodyLedgerService == null || claim.getFoundItemId() == null || claim.getFoundItemId().isBlank()) {
+            return;
+        }
+        try {
+            custodyLedgerService.appendEvent(
+                    claim.getFoundItemId(),
+                    eventType,
+                    claim.getClaimantEmail(),
+                    "claimant",
+                    "",
+                    "Claim workflow event recorded.",
+                    claim.getProofPhotoUrl()
+            );
+        } catch (RuntimeException exception) {
+            LOGGER.warn("Unable to append custody event for claim {}: {}", claim.getId(), exception.getMessage());
+        }
+    }
+
+    private void markFoundItemForTerminalClaim(Claim claim) {
+        if (foundItems == null || claim.getFoundItemId() == null || claim.getFoundItemId().isBlank()) {
+            return;
+        }
+        foundItems.findById(claim.getFoundItemId()).ifPresent(item -> {
+            if ("approved".equalsIgnoreCase(claim.getStatus()) && !"returned".equalsIgnoreCase(item.getStatus())) {
+                item.setStatus("claimed");
+                item.setUpdatedDate(clock.now());
+                foundItems.save(item);
+            }
+            if ("completed".equalsIgnoreCase(claim.getStatus())) {
+                item.setStatus("returned");
+                item.setClaimConfirmed(true);
+                item.setClaimConfirmedAt(clock.now());
+                item.setUpdatedDate(clock.now());
+                foundItems.save(item);
+                if (recoveryCaseService != null) {
+                    recoveryCaseService.markReturned(claim.getId(), claim.getFoundItemId());
+                }
+            }
+        });
     }
 
     private String valueOrGenerated(String value, String prefix) {

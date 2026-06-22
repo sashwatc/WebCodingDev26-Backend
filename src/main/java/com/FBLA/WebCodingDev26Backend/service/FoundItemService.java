@@ -1,10 +1,18 @@
 package com.FBLA.WebCodingDev26Backend.service;
 
 import com.FBLA.WebCodingDev26Backend.exception.NotFoundException;
+import com.FBLA.WebCodingDev26Backend.dto.PublicFoundItemResponse;
 import com.FBLA.WebCodingDev26Backend.mapper.PatchMapper;
+import com.FBLA.WebCodingDev26Backend.model.AssetRegistryRecord;
 import com.FBLA.WebCodingDev26Backend.model.FoundItem;
+import com.FBLA.WebCodingDev26Backend.model.LostReport;
 import com.FBLA.WebCodingDev26Backend.model.Rating;
+import com.FBLA.WebCodingDev26Backend.repository.AssetRegistryRecordRepository;
+import com.FBLA.WebCodingDev26Backend.repository.ClaimRepository;
+import com.FBLA.WebCodingDev26Backend.repository.CustodyEventRepository;
 import com.FBLA.WebCodingDev26Backend.repository.FoundItemRepository;
+import com.FBLA.WebCodingDev26Backend.repository.LostReportRepository;
+import com.FBLA.WebCodingDev26Backend.repository.RecoveryCaseRepository;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -23,20 +31,58 @@ public class FoundItemService {
     private final PatchMapper mapper;
     private final ClockService clock;
     private final MatchmakingService matchmakingService;
+    private final AssetRegistryRecordRepository assetRegistry;
+    private final ClaimRepository claims;
+    private final CustodyEventRepository custodyEvents;
+    private final RecoveryCaseRepository recoveryCases;
+    private final LostReportRepository lostReports;
+    private final CustodyLedgerService custodyLedgerService;
 
     public FoundItemService(FoundItemRepository repository, PatchMapper mapper, ClockService clock) {
-        this(repository, mapper, clock, null);
+        this(repository, mapper, clock, null, null, null, null, null, null, null);
     }
 
     @Autowired
-    public FoundItemService(FoundItemRepository repository, PatchMapper mapper, ClockService clock, MatchmakingService matchmakingService) {
+    public FoundItemService(
+            FoundItemRepository repository,
+            PatchMapper mapper,
+            ClockService clock,
+            MatchmakingService matchmakingService,
+            AssetRegistryRecordRepository assetRegistry,
+            ClaimRepository claims,
+            CustodyEventRepository custodyEvents,
+            RecoveryCaseRepository recoveryCases,
+            LostReportRepository lostReports,
+            CustodyLedgerService custodyLedgerService
+    ) {
         this.repository = repository;
         this.mapper = mapper;
         this.clock = clock;
         this.matchmakingService = matchmakingService;
+        this.assetRegistry = assetRegistry;
+        this.claims = claims;
+        this.custodyEvents = custodyEvents;
+        this.recoveryCases = recoveryCases;
+        this.lostReports = lostReports;
+        this.custodyLedgerService = custodyLedgerService;
     }
 
-    public List<FoundItem> list() {
+    public List<PublicFoundItemResponse> list() {
+        return repository.findAll().stream()
+                .filter(this::isPubliclyVisible)
+                .map(PublicFoundItemResponse::from)
+                .toList();
+    }
+
+    public PublicFoundItemResponse getPublic(String id) {
+        FoundItem item = repository.findById(id).orElseThrow(() -> new NotFoundException("Found item not found"));
+        if (!isPubliclyVisible(item)) {
+            throw new NotFoundException("Found item not found");
+        }
+        return PublicFoundItemResponse.from(item);
+    }
+
+    public List<FoundItem> listAdmin() {
         return repository.findAll();
     }
 
@@ -50,7 +96,9 @@ public class FoundItemService {
         item.setRecordType(valueOrDefault(item.getRecordType(), "found"));
         item.setIsFlagged(Boolean.TRUE.equals(item.getIsFlagged()));
         item.setClaimConfirmed(Boolean.TRUE.equals(item.getClaimConfirmed()));
+        applyAssetRegistryDefaults(item);
         FoundItem saved = repository.save(item);
+        appendCustody(saved, "intake_created", "Found item intake created.");
         if (matchmakingService != null) {
             try {
                 matchmakingService.refreshMatchesForFoundItem(saved.getId());
@@ -77,16 +125,28 @@ public class FoundItemService {
 
         FoundItem patch = mapper.convert(data, FoundItem.class);
         mapper.copyPresent(data, patch, existing, "id", "createdDate");
+        applyAssetRegistryDefaults(existing);
         existing.setUpdatedDate(clock.now());
         return repository.save(existing);
     }
 
     public boolean delete(String id) {
-        if (!repository.existsById(id)) {
-            throw new NotFoundException("Found item not found");
+        FoundItem existing = repository.findById(id).orElseThrow(() -> new NotFoundException("Found item not found"));
+        if (shouldArchiveInsteadOfDelete(id)) {
+            existing.setStatus("archived");
+            existing.setUpdatedDate(clock.now());
+            repository.save(existing);
+            appendCustody(existing, "archived", "Found item archived instead of hard-deleted because related records exist.");
+            return true;
         }
         repository.deleteById(id);
         return true;
+    }
+
+    public boolean isPubliclyVisible(FoundItem item) {
+        String status = normalize(item.getStatus());
+        return !Boolean.TRUE.equals(item.getRestrictedVisibility())
+                && status.equals("approved");
     }
 
     private FoundItem upsertRating(FoundItem existing, Object ratingValue) {
@@ -115,5 +175,74 @@ public class FoundItemService {
 
     private String valueOrDefault(String value, String fallback) {
         return value == null || value.isBlank() ? fallback : value;
+    }
+
+    private void applyAssetRegistryDefaults(FoundItem item) {
+        if (assetRegistry == null || item.getAssetTag() == null || item.getAssetTag().isBlank()) {
+            item.setRestrictedVisibility(Boolean.TRUE.equals(item.getRestrictedVisibility()));
+            return;
+        }
+
+        assetRegistry.findByAssetTagIgnoreCase(item.getAssetTag().trim()).ifPresent(record -> {
+            item.setRestrictedVisibility(true);
+            item.setAssetRecordId(record.getId());
+            item.setDepartmentDestination(record.getDepartmentDestination());
+        });
+    }
+
+    private boolean shouldArchiveInsteadOfDelete(String foundItemId) {
+        if (claims != null && !claims.findByFoundItemId(foundItemId).isEmpty()) {
+            return true;
+        }
+        if (custodyEvents != null && !custodyEvents.findByFoundItemIdOrderBySequenceNumberAsc(foundItemId).isEmpty()) {
+            return true;
+        }
+        if (recoveryCases != null && recoveryCases.findAll().stream().anyMatch(recoveryCase -> foundItemId.equals(recoveryCase.getSelectedFoundItemId()))) {
+            return true;
+        }
+        if (lostReports != null && lostReports.findAll().stream().anyMatch(report -> containsMatch(report, foundItemId))) {
+            return true;
+        }
+        return false;
+    }
+
+    private boolean containsMatch(LostReport report, String foundItemId) {
+        if (report.getMatchedItems() == null) {
+            return false;
+        }
+        return report.getMatchedItems().stream().anyMatch(match -> {
+            if (match instanceof String id) {
+                return foundItemId.equals(id);
+            }
+            if (match instanceof Map<?, ?> raw) {
+                Object camel = raw.get("foundItemId");
+                Object snake = raw.get("found_item_id");
+                return foundItemId.equals(String.valueOf(camel)) || foundItemId.equals(String.valueOf(snake));
+            }
+            return false;
+        });
+    }
+
+    private String normalize(String value) {
+        return value == null ? "" : value.trim().toLowerCase();
+    }
+
+    private void appendCustody(FoundItem item, String eventType, String notes) {
+        if (custodyLedgerService == null) {
+            return;
+        }
+        try {
+            custodyLedgerService.appendEvent(
+                    item.getId(),
+                    eventType,
+                    valueOrDefault(item.getFinderEmail(), "system@pvhs.demo"),
+                    valueOrDefault(item.getFinderRole(), "system"),
+                    item.getStorageLocation(),
+                    notes,
+                    null
+            );
+        } catch (RuntimeException exception) {
+            LOGGER.warn("Unable to append custody event for {}: {}", item.getId(), exception.getMessage());
+        }
     }
 }

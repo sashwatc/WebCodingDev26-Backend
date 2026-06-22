@@ -50,8 +50,8 @@ class SeedDataConfigTest {
         runner.run();
 
         verify(foundItems).saveAll(ArgumentMatchers.<FoundItem>anyIterable());
-        verify(lostReports).save(any(LostReport.class));
-        verify(claims).save(any(Claim.class));
+        verify(lostReports, times(2)).save(any(LostReport.class));
+        verify(claims, times(4)).save(any(Claim.class));
         verify(notifications).save(any(Notification.class));
         verify(auditLogs).save(any(AuditLog.class));
         verify(users, times(2)).save(any(AppUser.class));

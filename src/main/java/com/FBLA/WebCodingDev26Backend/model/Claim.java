@@ -2,6 +2,8 @@ package com.FBLA.WebCodingDev26Backend.model;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
@@ -28,6 +30,11 @@ public class Claim {
     private String reviewedBy;
     private String reviewedAt;
     private String receivedConfirmedAt;
+    private List<String> evidenceChecklist = new ArrayList<>();
+    private Map<String, String> privateEvidenceResponses = new LinkedHashMap<>();
+    private String verificationSummary;
+    private Integer verificationScore;
+    private List<String> verificationFlags = new ArrayList<>();
     private Integer claimantRating;
     private String claimantReview;
     private String reviewStatus;
@@ -74,6 +81,16 @@ public class Claim {
     public void setReviewedAt(String reviewedAt) { this.reviewedAt = reviewedAt; }
     public String getReceivedConfirmedAt() { return receivedConfirmedAt; }
     public void setReceivedConfirmedAt(String receivedConfirmedAt) { this.receivedConfirmedAt = receivedConfirmedAt; }
+    public List<String> getEvidenceChecklist() { return evidenceChecklist; }
+    public void setEvidenceChecklist(List<String> evidenceChecklist) { this.evidenceChecklist = evidenceChecklist == null ? new ArrayList<>() : evidenceChecklist; }
+    public Map<String, String> getPrivateEvidenceResponses() { return privateEvidenceResponses; }
+    public void setPrivateEvidenceResponses(Map<String, String> privateEvidenceResponses) { this.privateEvidenceResponses = privateEvidenceResponses == null ? new LinkedHashMap<>() : privateEvidenceResponses; }
+    public String getVerificationSummary() { return verificationSummary; }
+    public void setVerificationSummary(String verificationSummary) { this.verificationSummary = verificationSummary; }
+    public Integer getVerificationScore() { return verificationScore; }
+    public void setVerificationScore(Integer verificationScore) { this.verificationScore = verificationScore; }
+    public List<String> getVerificationFlags() { return verificationFlags; }
+    public void setVerificationFlags(List<String> verificationFlags) { this.verificationFlags = verificationFlags == null ? new ArrayList<>() : verificationFlags; }
     public Integer getClaimantRating() { return claimantRating; }
     public void setClaimantRating(Integer claimantRating) { this.claimantRating = claimantRating; }
     public String getClaimantReview() { return claimantReview; }

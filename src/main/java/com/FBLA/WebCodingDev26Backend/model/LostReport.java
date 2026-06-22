@@ -28,6 +28,8 @@ public class LostReport {
     private String updatedDate;
     private String extraNotes;
     private String studentId;
+    private String eventHubId;
+    private String campusZoneId;
 
     private List<String> photoUrls = new ArrayList<>();
 
@@ -73,6 +75,10 @@ public class LostReport {
     public void setExtraNotes(String extraNotes) { this.extraNotes = extraNotes; }
     public String getStudentId() { return studentId; }
     public void setStudentId(String studentId) { this.studentId = studentId; }
+    public String getEventHubId() { return eventHubId; }
+    public void setEventHubId(String eventHubId) { this.eventHubId = eventHubId; }
+    public String getCampusZoneId() { return campusZoneId; }
+    public void setCampusZoneId(String campusZoneId) { this.campusZoneId = campusZoneId; }
     public List<String> getPhotoUrls() { return photoUrls; }
     public void setPhotoUrls(List<String> photoUrls) { this.photoUrls = photoUrls == null ? new ArrayList<>() : photoUrls; }
     public String getPhotoUrl() { return photoUrls == null || photoUrls.isEmpty() ? "" : photoUrls.get(0); }
