@@ -25,6 +25,7 @@ public class GenericEntityService {
     private final AuditLogRepository auditLogs;
     private final PatchMapper mapper;
     private final ClockService clock;
+    private final WorkflowService workflow;
 
     public GenericEntityService(
             LostReportRepository lostReports,
@@ -32,7 +33,8 @@ public class GenericEntityService {
             NotificationRepository notifications,
             AuditLogRepository auditLogs,
             PatchMapper mapper,
-            ClockService clock
+            ClockService clock,
+            WorkflowService workflow
     ) {
         this.lostReports = lostReports;
         this.claims = claims;
@@ -40,6 +42,7 @@ public class GenericEntityService {
         this.auditLogs = auditLogs;
         this.mapper = mapper;
         this.clock = clock;
+        this.workflow = workflow;
     }
 
     public List<?> list(String entityName) {
@@ -50,16 +53,35 @@ public class GenericEntityService {
         EntityAdapter<?> adapter = adapter(entityName);
         Object entity = mapper.convert(data, adapter.type());
         applyCreateDefaults(entity, adapter.prefix());
-        return save(adapter, entity);
+        if (entity instanceof Claim claim) {
+            workflow.validateClaim(claim, null);
+        }
+        Object saved = save(adapter, entity);
+        if (saved instanceof LostReport lostReport) {
+            return workflow.syncMatchesForLostReport(lostReport);
+        }
+        return saved;
     }
 
     public Object update(String entityName, String id, Map<String, Object> data) {
         EntityAdapter<?> adapter = adapter(entityName);
         Object existing = adapter.repository().findById(id).orElseThrow(() -> new NotFoundException(entityName + " not found"));
+        Object previous = mapper.convert(Map.of(), adapter.type());
+        mapper.copyNonNull(existing, previous);
         Object patch = mapper.convert(data, adapter.type());
         mapper.copyPresent(data, patch, existing, "id", "createdDate");
         applyUpdateTimestamp(existing);
-        return save(adapter, existing);
+        if (existing instanceof Claim claim) {
+            workflow.validateClaim(claim, (Claim) previous);
+        }
+        Object saved = save(adapter, existing);
+        if (saved instanceof Claim claim) {
+            workflow.applyClaimStatusSideEffects(claim, (Claim) previous);
+        }
+        if (saved instanceof LostReport lostReport) {
+            return workflow.syncMatchesForLostReport(lostReport);
+        }
+        return saved;
     }
 
     public boolean delete(String entityName, String id) {
@@ -95,7 +117,7 @@ public class GenericEntityService {
             lostReport.setUpdatedDate(valueOrDefault(lostReport.getUpdatedDate(), now));
         } else if (entity instanceof Claim claim) {
             claim.setId(valueOrGenerated(claim.getId(), prefix));
-            claim.setStatus(valueOrDefault(claim.getStatus(), "pending_review"));
+            claim.setStatus(valueOrDefault(claim.getStatus(), "submitted"));
             claim.setRiskScore(claim.getRiskScore() == null ? 0 : claim.getRiskScore());
             claim.setCreatedDate(valueOrDefault(claim.getCreatedDate(), now));
             claim.setUpdatedDate(valueOrDefault(claim.getUpdatedDate(), now));

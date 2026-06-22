@@ -17,11 +17,13 @@ public class FoundItemService {
     private final FoundItemRepository repository;
     private final PatchMapper mapper;
     private final ClockService clock;
+    private final WorkflowService workflow;
 
-    public FoundItemService(FoundItemRepository repository, PatchMapper mapper, ClockService clock) {
+    public FoundItemService(FoundItemRepository repository, PatchMapper mapper, ClockService clock, WorkflowService workflow) {
         this.repository = repository;
         this.mapper = mapper;
         this.clock = clock;
+        this.workflow = workflow;
     }
 
     public List<FoundItem> list() {
@@ -38,7 +40,9 @@ public class FoundItemService {
         item.setRecordType(valueOrDefault(item.getRecordType(), "found"));
         item.setIsFlagged(Boolean.TRUE.equals(item.getIsFlagged()));
         item.setClaimConfirmed(Boolean.TRUE.equals(item.getClaimConfirmed()));
-        return repository.save(item);
+        FoundItem savedItem = repository.save(item);
+        workflow.syncMatchesForFoundItem(savedItem);
+        return savedItem;
     }
 
     public FoundItem update(String id, Map<String, Object> data) {
@@ -58,15 +62,21 @@ public class FoundItemService {
         FoundItem patch = mapper.convert(data, FoundItem.class);
         mapper.copyPresent(data, patch, existing, "id", "createdDate");
         existing.setUpdatedDate(clock.now());
-        return repository.save(existing);
+        FoundItem savedItem = repository.save(existing);
+        workflow.syncMatchesForFoundItem(savedItem);
+        return savedItem;
     }
 
-    public boolean delete(String id) {
-        if (!repository.existsById(id)) {
-            throw new NotFoundException("Found item not found");
+    public Map<String, Object> delete(String id) {
+        FoundItem existing = repository.findById(id).orElseThrow(() -> new NotFoundException("Found item not found"));
+        if (workflow.hasFoundItemReferences(id)) {
+            existing.setStatus("archived");
+            existing.setUpdatedDate(clock.now());
+            FoundItem archivedItem = repository.save(existing);
+            return Map.of("success", true, "archived", true, "item", archivedItem);
         }
         repository.deleteById(id);
-        return true;
+        return Map.of("success", true, "archived", false);
     }
 
     private FoundItem upsertRating(FoundItem existing, Object ratingValue) {

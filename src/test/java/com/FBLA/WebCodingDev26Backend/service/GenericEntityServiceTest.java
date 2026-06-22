@@ -29,12 +29,15 @@ class GenericEntityServiceTest {
     private NotificationRepository notifications;
     @Mock
     private AuditLogRepository auditLogs;
+    @Mock
+    private WorkflowService workflow;
 
     @Test
     void createLostReportAcceptsFrontendPayloadShape() {
         GenericEntityService service = service();
 
         when(lostReports.save(any(LostReport.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(workflow.syncMatchesForLostReport(any(LostReport.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         LostReport report = (LostReport) service.create("LostReport", Map.ofEntries(
                 Map.entry("item_type", "AirPods Pro case"),
@@ -124,7 +127,8 @@ class GenericEntityServiceTest {
                 notifications,
                 auditLogs,
                 new PatchMapper(new JacksonConfig().objectMapper()),
-                new ClockService()
+                new ClockService(),
+                workflow
         );
     }
 }

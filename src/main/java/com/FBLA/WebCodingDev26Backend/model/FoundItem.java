@@ -35,6 +35,7 @@ public class FoundItem {
     private Boolean isFlagged;
     private Boolean claimConfirmed;
     private String claimConfirmedAt;
+    private String linkedLostReportId;
 
     private List<String> photoUrls = new ArrayList<>();
 
@@ -96,6 +97,8 @@ public class FoundItem {
     public void setClaimConfirmed(Boolean claimConfirmed) { this.claimConfirmed = claimConfirmed; }
     public String getClaimConfirmedAt() { return claimConfirmedAt; }
     public void setClaimConfirmedAt(String claimConfirmedAt) { this.claimConfirmedAt = claimConfirmedAt; }
+    public String getLinkedLostReportId() { return linkedLostReportId; }
+    public void setLinkedLostReportId(String linkedLostReportId) { this.linkedLostReportId = linkedLostReportId; }
     public List<String> getPhotoUrls() { return photoUrls; }
     public void setPhotoUrls(List<String> photoUrls) { this.photoUrls = photoUrls == null ? new ArrayList<>() : photoUrls; }
     public List<String> getTags() { return tags; }

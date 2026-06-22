@@ -37,6 +37,7 @@ import com.FBLA.WebCodingDev26Backend.service.UploadService;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -168,7 +169,7 @@ class ApiIntegrationTests {
         when(foundItemService.update(eq("found_test"), any()))
                 .thenReturn(approvedItem)
                 .thenReturn(ratedItem);
-        when(foundItemService.delete("found_test")).thenReturn(true);
+        when(foundItemService.delete("found_test")).thenReturn(Map.of("success", true, "archived", false));
 
         mockMvc.perform(get("/api/items"))
                 .andExpect(status().isOk())
