@@ -14,17 +14,23 @@ import com.FBLA.WebCodingDev26Backend.repository.NotificationRepository;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.stereotype.Service;
 
 @Service
 public class GenericEntityService {
+    private static final Logger LOGGER = LoggerFactory.getLogger(GenericEntityService.class);
+
     private final LostReportRepository lostReports;
     private final ClaimRepository claims;
     private final NotificationRepository notifications;
     private final AuditLogRepository auditLogs;
     private final PatchMapper mapper;
     private final ClockService clock;
+    private final MatchmakingService matchmakingService;
 
     public GenericEntityService(
             LostReportRepository lostReports,
@@ -34,12 +40,26 @@ public class GenericEntityService {
             PatchMapper mapper,
             ClockService clock
     ) {
+        this(lostReports, claims, notifications, auditLogs, mapper, clock, null);
+    }
+
+    @Autowired
+    public GenericEntityService(
+            LostReportRepository lostReports,
+            ClaimRepository claims,
+            NotificationRepository notifications,
+            AuditLogRepository auditLogs,
+            PatchMapper mapper,
+            ClockService clock,
+            MatchmakingService matchmakingService
+    ) {
         this.lostReports = lostReports;
         this.claims = claims;
         this.notifications = notifications;
         this.auditLogs = auditLogs;
         this.mapper = mapper;
         this.clock = clock;
+        this.matchmakingService = matchmakingService;
     }
 
     public List<?> list(String entityName) {
@@ -50,7 +70,16 @@ public class GenericEntityService {
         EntityAdapter<?> adapter = adapter(entityName);
         Object entity = mapper.convert(data, adapter.type());
         applyCreateDefaults(entity, adapter.prefix());
-        return save(adapter, entity);
+        Object saved = save(adapter, entity);
+        if (saved instanceof LostReport lostReport && matchmakingService != null) {
+            try {
+                matchmakingService.refreshMatchesForLostReport(lostReport.getId());
+                return lostReports.findById(lostReport.getId()).orElse(lostReport);
+            } catch (RuntimeException exception) {
+                LOGGER.warn("Unable to refresh matches for lost report {}: {}", lostReport.getId(), exception.getMessage());
+            }
+        }
+        return saved;
     }
 
     public Object update(String entityName, String id, Map<String, Object> data) {

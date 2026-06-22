@@ -10,18 +10,30 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
 public class FoundItemService {
+    private static final Logger LOGGER = LoggerFactory.getLogger(FoundItemService.class);
+
     private final FoundItemRepository repository;
     private final PatchMapper mapper;
     private final ClockService clock;
+    private final MatchmakingService matchmakingService;
 
     public FoundItemService(FoundItemRepository repository, PatchMapper mapper, ClockService clock) {
+        this(repository, mapper, clock, null);
+    }
+
+    @Autowired
+    public FoundItemService(FoundItemRepository repository, PatchMapper mapper, ClockService clock, MatchmakingService matchmakingService) {
         this.repository = repository;
         this.mapper = mapper;
         this.clock = clock;
+        this.matchmakingService = matchmakingService;
     }
 
     public List<FoundItem> list() {
@@ -38,7 +50,15 @@ public class FoundItemService {
         item.setRecordType(valueOrDefault(item.getRecordType(), "found"));
         item.setIsFlagged(Boolean.TRUE.equals(item.getIsFlagged()));
         item.setClaimConfirmed(Boolean.TRUE.equals(item.getClaimConfirmed()));
-        return repository.save(item);
+        FoundItem saved = repository.save(item);
+        if (matchmakingService != null) {
+            try {
+                matchmakingService.refreshMatchesForFoundItem(saved.getId());
+            } catch (RuntimeException exception) {
+                LOGGER.warn("Unable to refresh matches for found item {}: {}", saved.getId(), exception.getMessage());
+            }
+        }
+        return saved;
     }
 
     public FoundItem update(String id, Map<String, Object> data) {

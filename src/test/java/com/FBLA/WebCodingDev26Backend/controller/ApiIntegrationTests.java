@@ -27,12 +27,14 @@ import com.FBLA.WebCodingDev26Backend.model.AuditLog;
 import com.FBLA.WebCodingDev26Backend.model.Claim;
 import com.FBLA.WebCodingDev26Backend.model.FoundItem;
 import com.FBLA.WebCodingDev26Backend.model.LostReport;
+import com.FBLA.WebCodingDev26Backend.model.MatchSuggestion;
 import com.FBLA.WebCodingDev26Backend.model.Notification;
 import com.FBLA.WebCodingDev26Backend.model.Rating;
 import com.FBLA.WebCodingDev26Backend.service.AuthService;
 import com.FBLA.WebCodingDev26Backend.service.FoundItemService;
 import com.FBLA.WebCodingDev26Backend.service.GenericEntityService;
 import com.FBLA.WebCodingDev26Backend.service.HealthService;
+import com.FBLA.WebCodingDev26Backend.service.MatchmakingService;
 import com.FBLA.WebCodingDev26Backend.service.UploadService;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -66,6 +68,8 @@ class ApiIntegrationTests {
     private AuthService authService;
     @Mock
     private UploadService uploadService;
+    @Mock
+    private MatchmakingService matchmakingService;
 
     private MockMvc mockMvc;
 
@@ -76,6 +80,7 @@ class ApiIntegrationTests {
                         new HealthController(healthService),
                         new FoundItemController(foundItemService),
                         new GenericEntityController(genericEntityService),
+                        new MatchmakingController(matchmakingService),
                         new AuthController(authService),
                         new UploadController(uploadService)
                 )
@@ -228,6 +233,29 @@ class ApiIntegrationTests {
     }
 
     @Test
+    void matchmakingRoutesFetchAndRefreshSuggestions() throws Exception {
+        MatchSuggestion suggestion = matchSuggestion();
+
+        when(matchmakingService.getMatchesForLostReport("lost_001")).thenReturn(List.of(suggestion));
+        when(matchmakingService.refreshMatchesForLostReport("lost_001")).thenReturn(List.of(suggestion));
+        when(matchmakingService.refreshMatchesForFoundItem("found_002")).thenReturn(List.of(suggestion));
+
+        mockMvc.perform(get("/api/matches/lost-reports/lost_001"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].found_item_id").value("found_002"))
+                .andExpect(jsonPath("$[0].confidence").value(96))
+                .andExpect(jsonPath("$[0].source").value("ai"));
+
+        mockMvc.perform(post("/api/matches/lost-reports/lost_001/refresh"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].found_item_title").value("Blue JanSport Backpack"));
+
+        mockMvc.perform(post("/api/matches/found-items/found_002/refresh"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].reasons[0]").value("brand match"));
+    }
+
+    @Test
     void authRoutesUpsertAndFetchUser() throws Exception {
         AppUser student = user("user_riley", "Riley Chen", "riley.chen@pleasantvalley.edu", "student");
         AppUser updatedStudent = user("user_riley", "Riley C.", "riley.chen@pleasantvalley.edu", "student");
@@ -368,6 +396,17 @@ class ApiIntegrationTests {
         report.setMatchedItems(new ArrayList<>());
         report.setPhotoUrls(new ArrayList<>());
         return report;
+    }
+
+    private MatchSuggestion matchSuggestion() {
+        MatchSuggestion suggestion = new MatchSuggestion();
+        suggestion.setFoundItemId("found_002");
+        suggestion.setFoundItemTitle("Blue JanSport Backpack");
+        suggestion.setConfidence(96);
+        suggestion.setReasons(List.of("brand match", "color match"));
+        suggestion.setSource("ai");
+        suggestion.setStatus("suggested");
+        return suggestion;
     }
 
     private Claim claim(String id) {

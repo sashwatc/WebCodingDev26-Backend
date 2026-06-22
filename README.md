@@ -66,7 +66,15 @@ MONGO_DATABASE=lostthenfound
 FRONTEND_URL=https://your-frontend.example.com
 ADMIN_EMAIL=avery.patel@pleasantvalley.edu
 SEED_DATA_ENABLED=true
+AI_MATCHMAKING_ENABLED=true
+AI_API_KEY=
+AI_MATCHMAKING_BASE_URL=https://api.openai.com/v1/chat/completions
+AI_MATCHMAKING_MODEL=gpt-4o-mini
+AI_MATCHMAKING_MAX_CANDIDATES=8
+AI_MATCHMAKING_MIN_CONFIDENCE=35
 ```
+
+`AI_API_KEY` is optional. When it is missing or AI matchmaking is disabled, the backend still generates matches with the built-in local scorer.
 
 ## Data
 
@@ -106,6 +114,9 @@ VITE_API_URL=https://your-backend.example.com npm run build
 - `POST /api/entities/{entityName}`
 - `PATCH /api/entities/{entityName}/{id}`
 - `DELETE /api/entities/{entityName}/{id}`
+- `GET /api/matches/lost-reports/{id}`
+- `POST /api/matches/lost-reports/{id}/refresh`
+- `POST /api/matches/found-items/{id}/refresh`
 - `GET /api/auth/user?email={email}`
 - `POST /api/auth/signin`
 - `POST /api/uploads`
@@ -129,3 +140,4 @@ Tests mock the service layer where appropriate so Atlas is not required during C
 
 - Auth intentionally matches the current simple frontend flow; no JWT/security layer yet.
 - Uploads return the submitted `data_url` through an upload service abstraction. Cloud storage can be added there later.
+- AI matchmaking sends only item details to the configured AI endpoint, not student contact fields.
