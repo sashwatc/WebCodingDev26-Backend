@@ -9,6 +9,7 @@ import com.FBLA.WebCodingDev26Backend.repository.CustodyEventRepository;
 import com.FBLA.WebCodingDev26Backend.repository.EventRecoveryHubRepository;
 import com.FBLA.WebCodingDev26Backend.repository.FoundItemRepository;
 import com.FBLA.WebCodingDev26Backend.repository.LostReportRepository;
+import com.FBLA.WebCodingDev26Backend.repository.NotificationDeliveryRepository;
 import com.FBLA.WebCodingDev26Backend.repository.NotificationRepository;
 import com.FBLA.WebCodingDev26Backend.repository.PartnerRelayRepository;
 import com.FBLA.WebCodingDev26Backend.repository.PreventionAlertRepository;
@@ -39,6 +40,8 @@ class WebCodingDev26BackendApplicationTests {
 	private ClaimRepository claims;
 	@MockitoBean
 	private NotificationRepository notifications;
+	@MockitoBean
+	private NotificationDeliveryRepository notificationDeliveries;
 	@MockitoBean
 	private AuditLogRepository auditLogs;
 	@MockitoBean

@@ -19,10 +19,14 @@ import java.util.Map;
 import java.util.Set;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 @Service
 public class MatchmakingService {
+    private static final Logger LOGGER = LoggerFactory.getLogger(MatchmakingService.class);
+    private static final int STRONG_MATCH_THRESHOLD = 80;
     private static final Set<String> MATCHABLE_FOUND_STATUSES = Set.of(ItemStatus.FOUND, "approved");
     private static final Set<String> STOP_WORDS = Set.of(
             "a", "an", "and", "are", "at", "case", "for", "in", "is", "it", "lost", "missing", "of", "on", "the",
@@ -36,6 +40,7 @@ public class MatchmakingService {
     private final int maxCandidates;
     private final int minConfidence;
     private final RecoveryCaseService recoveryCaseService;
+    private final RecoveryPulseDispatcher recoveryPulse;
 
     public MatchmakingService(
             LostReportRepository lostReports,
@@ -45,7 +50,7 @@ public class MatchmakingService {
             @Value("${app.ai.matchmaking.max-candidates:8}") int maxCandidates,
             @Value("${app.ai.matchmaking.min-confidence:35}") int minConfidence
     ) {
-        this(lostReports, foundItems, aiMatchClient, clock, maxCandidates, minConfidence, null);
+        this(lostReports, foundItems, aiMatchClient, clock, maxCandidates, minConfidence, null, null);
     }
 
     @Autowired
@@ -56,7 +61,8 @@ public class MatchmakingService {
             ClockService clock,
             @Value("${app.ai.matchmaking.max-candidates:8}") int maxCandidates,
             @Value("${app.ai.matchmaking.min-confidence:35}") int minConfidence,
-            RecoveryCaseService recoveryCaseService
+            RecoveryCaseService recoveryCaseService,
+            RecoveryPulseDispatcher recoveryPulse
     ) {
         this.lostReports = lostReports;
         this.foundItems = foundItems;
@@ -65,6 +71,7 @@ public class MatchmakingService {
         this.maxCandidates = Math.max(1, maxCandidates);
         this.minConfidence = Math.max(0, Math.min(100, minConfidence));
         this.recoveryCaseService = recoveryCaseService;
+        this.recoveryPulse = recoveryPulse;
     }
 
     public List<MatchSuggestion> getMatchesForLostReport(String lostReportId) {
@@ -76,6 +83,7 @@ public class MatchmakingService {
     public List<MatchSuggestion> refreshMatchesForLostReport(String lostReportId) {
         LostReport report = lostReports.findById(lostReportId)
                 .orElseThrow(() -> new NotFoundException("Lost report not found"));
+        Set<String> previousStrongMatches = strongMatchIds(typedMatches(report));
         List<FoundItem> candidates = foundItems.findAll().stream()
                 .filter(this::eligibleFoundItem)
                 .toList();
@@ -87,6 +95,7 @@ public class MatchmakingService {
         if (!matches.isEmpty() && recoveryCaseService != null) {
             recoveryCaseService.refreshForLostReport(lostReportId);
         }
+        dispatchNewStrongMatches(report, matches, previousStrongMatches);
         return matches;
     }
 
@@ -102,6 +111,7 @@ public class MatchmakingService {
             if (!eligibleLostReport(report)) {
                 continue;
             }
+            Set<String> previousStrongMatches = strongMatchIds(typedMatches(report));
             List<MatchSuggestion> matches = new ArrayList<>(buildMatches(report, List.of(item)));
             if (item.getLinkedLostReportId() != null && item.getLinkedLostReportId().equals(report.getId())) {
                 matches.add(finderResponseSuggestion(item));
@@ -114,10 +124,41 @@ public class MatchmakingService {
                 if (recoveryCaseService != null) {
                     recoveryCaseService.refreshForLostReport(report.getId());
                 }
+                dispatchNewStrongMatches(report, matches, previousStrongMatches);
                 impacted.addAll(matches);
             }
         }
         return impacted;
+    }
+
+    private void dispatchNewStrongMatches(LostReport report, List<MatchSuggestion> matches, Set<String> previousStrongMatches) {
+        if (recoveryPulse == null || matches == null || matches.isEmpty()) {
+            return;
+        }
+        matches.stream()
+                .filter(this::isStrongMatch)
+                .filter(match -> match.getFoundItemId() != null && !previousStrongMatches.contains(match.getFoundItemId()))
+                .forEach(match -> {
+                    try {
+                        recoveryPulse.strongMatchAvailable(report, Map.of("found_item_id", match.getFoundItemId()));
+                    } catch (RuntimeException exception) {
+                        LOGGER.warn("Unable to dispatch strong match notification for lost report {}: {}", report.getId(), exception.getMessage());
+                    }
+                });
+    }
+
+    private Set<String> strongMatchIds(List<MatchSuggestion> matches) {
+        Set<String> ids = new LinkedHashSet<>();
+        for (MatchSuggestion match : matches) {
+            if (isStrongMatch(match) && match.getFoundItemId() != null && !match.getFoundItemId().isBlank()) {
+                ids.add(match.getFoundItemId());
+            }
+        }
+        return ids;
+    }
+
+    private boolean isStrongMatch(MatchSuggestion match) {
+        return match != null && match.getConfidence() != null && match.getConfidence() >= STRONG_MATCH_THRESHOLD;
     }
 
     private List<MatchSuggestion> buildMatches(LostReport report, List<FoundItem> possibleItems) {

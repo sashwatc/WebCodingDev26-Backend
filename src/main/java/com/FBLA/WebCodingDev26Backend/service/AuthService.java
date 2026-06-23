@@ -3,6 +3,8 @@ package com.FBLA.WebCodingDev26Backend.service;
 import com.FBLA.WebCodingDev26Backend.dto.SignInRequest;
 import com.FBLA.WebCodingDev26Backend.model.AppUser;
 import com.FBLA.WebCodingDev26Backend.repository.AppUserRepository;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
@@ -39,8 +41,27 @@ public class AuthService {
         user.setFullName(request.getFullName().trim());
         user.setEmail(normalizedEmail);
         user.setRole(normalizedEmail.equals(adminEmail) ? "admin" : "student");
+        applyNotificationDefaults(user);
         user.setUpdatedDate(now);
         return repository.save(user);
+    }
+
+    private void applyNotificationDefaults(AppUser user) {
+        if (user.getEmailNotificationsEnabled() == null) {
+            user.setEmailNotificationsEnabled(true);
+        }
+        if (user.getSmsOptIn() == null) {
+            user.setSmsOptIn(false);
+        }
+        if (user.getSmsNotificationsEnabled() == null) {
+            user.setSmsNotificationsEnabled(false);
+        }
+        if (user.getWebhookNotificationsEnabled() == null) {
+            user.setWebhookNotificationsEnabled(true);
+        }
+        if (user.getNotificationCategories() == null) {
+            user.setNotificationCategories(new ArrayList<>(List.of("all")));
+        }
     }
 
     private String normalize(String email) {

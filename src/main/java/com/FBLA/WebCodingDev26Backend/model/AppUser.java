@@ -1,5 +1,7 @@
 package com.FBLA.WebCodingDev26Backend.model;
 
+import java.util.ArrayList;
+import java.util.List;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
@@ -13,6 +15,12 @@ public class AppUser {
     private String email;
     private String role;
     private String avatarUrl;
+    private String phoneNumber;
+    private Boolean emailNotificationsEnabled = true;
+    private Boolean smsOptIn = false;
+    private Boolean smsNotificationsEnabled = false;
+    private Boolean webhookNotificationsEnabled = true;
+    private List<String> notificationCategories = new ArrayList<>();
     private String createdDate;
     private String updatedDate;
 
@@ -26,6 +34,18 @@ public class AppUser {
     public void setRole(String role) { this.role = role; }
     public String getAvatarUrl() { return avatarUrl; }
     public void setAvatarUrl(String avatarUrl) { this.avatarUrl = avatarUrl; }
+    public String getPhoneNumber() { return phoneNumber; }
+    public void setPhoneNumber(String phoneNumber) { this.phoneNumber = phoneNumber; }
+    public Boolean getEmailNotificationsEnabled() { return emailNotificationsEnabled; }
+    public void setEmailNotificationsEnabled(Boolean emailNotificationsEnabled) { this.emailNotificationsEnabled = emailNotificationsEnabled; }
+    public Boolean getSmsOptIn() { return smsOptIn; }
+    public void setSmsOptIn(Boolean smsOptIn) { this.smsOptIn = smsOptIn; }
+    public Boolean getSmsNotificationsEnabled() { return smsNotificationsEnabled; }
+    public void setSmsNotificationsEnabled(Boolean smsNotificationsEnabled) { this.smsNotificationsEnabled = smsNotificationsEnabled; }
+    public Boolean getWebhookNotificationsEnabled() { return webhookNotificationsEnabled; }
+    public void setWebhookNotificationsEnabled(Boolean webhookNotificationsEnabled) { this.webhookNotificationsEnabled = webhookNotificationsEnabled; }
+    public List<String> getNotificationCategories() { return notificationCategories; }
+    public void setNotificationCategories(List<String> notificationCategories) { this.notificationCategories = notificationCategories; }
     public String getCreatedDate() { return createdDate; }
     public void setCreatedDate(String createdDate) { this.createdDate = createdDate; }
     public String getUpdatedDate() { return updatedDate; }

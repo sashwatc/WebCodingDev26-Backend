@@ -11,6 +11,7 @@ import com.FBLA.WebCodingDev26Backend.model.ItemStatus;
 import com.FBLA.WebCodingDev26Backend.model.LostReport;
 import com.FBLA.WebCodingDev26Backend.model.MatchSuggestion;
 import com.FBLA.WebCodingDev26Backend.model.Notification;
+import com.FBLA.WebCodingDev26Backend.model.NotificationDelivery;
 import com.FBLA.WebCodingDev26Backend.model.PartnerRelay;
 import com.FBLA.WebCodingDev26Backend.model.RecoveryCase;
 import com.FBLA.WebCodingDev26Backend.model.RecoveryMission;
@@ -25,6 +26,7 @@ import com.FBLA.WebCodingDev26Backend.repository.EventRecoveryHubRepository;
 import com.FBLA.WebCodingDev26Backend.repository.FoundItemRepository;
 import com.FBLA.WebCodingDev26Backend.repository.LostReportRepository;
 import com.FBLA.WebCodingDev26Backend.repository.NotificationRepository;
+import com.FBLA.WebCodingDev26Backend.repository.NotificationDeliveryRepository;
 import com.FBLA.WebCodingDev26Backend.repository.PartnerRelayRepository;
 import com.FBLA.WebCodingDev26Backend.repository.PreventionAlertRepository;
 import com.FBLA.WebCodingDev26Backend.repository.RecoveryCaseRepository;
@@ -61,6 +63,7 @@ public class SeedDataConfig {
             RecoveryMissionRepository recoveryMissions,
             ReturnPassRepository returnPasses,
             PreventionAlertRepository preventionAlerts,
+            NotificationDeliveryRepository notificationDeliveries,
             RecoveryNodeRepository recoveryNodes,
             PartnerRelayRepository partnerRelays,
             CustodyLedgerService custodyLedgerService,
@@ -80,6 +83,7 @@ public class SeedDataConfig {
                 recoveryMissions,
                 returnPasses,
                 preventionAlerts,
+                notificationDeliveries,
                 recoveryNodes,
                 partnerRelays,
                 custodyLedgerService,
@@ -96,7 +100,7 @@ public class SeedDataConfig {
             AppUserRepository users,
             boolean seedEnabled
     ) {
-        return seedDataRunner(foundItems, lostReports, claims, notifications, auditLogs, users, null, null, null, null, null, null, null, null, null, null, seedEnabled);
+        return seedDataRunner(foundItems, lostReports, claims, notifications, auditLogs, users, null, null, null, null, null, null, null, null, null, null, null, seedEnabled);
     }
 
     private CommandLineRunner seedDataRunner(
@@ -113,6 +117,7 @@ public class SeedDataConfig {
             RecoveryMissionRepository recoveryMissions,
             ReturnPassRepository returnPasses,
             PreventionAlertRepository preventionAlerts,
+            NotificationDeliveryRepository notificationDeliveries,
             RecoveryNodeRepository recoveryNodes,
             PartnerRelayRepository partnerRelays,
             CustodyLedgerService custodyLedgerService,
@@ -139,10 +144,14 @@ public class SeedDataConfig {
                 seedRelay(recoveryNodes, partnerRelays);
                 seedCustody(custodyLedgerService);
 
-                notifications.save(notification("notif_001", "jordan.kim@pleasantvalley.edu", "Potential match found", "We found a possible match for your lost item report.", "match_found", "/UserDashboard", "found_002"));
+                notifications.save(notification("notif_001", "jordan.kim@pleasantvalley.edu", "Strong match available", "A strong possible match is ready for review.", "strong_item_match", "/UserDashboard", "found_002"));
+                notifications.save(notification("notif_return_pass_demo", "riley.chen@pleasantvalley.edu", "Return Pass ready", "Your Return Pass is ready. Open Lost Then Found for secure pickup instructions.", "return_pass_ready", "/return-pass/pass_calculator_active", "found_claimed_calculator"));
+                notifications.save(notification("notif_pattern_review_demo", "avery.patel@pleasantvalley.edu", "Pattern Review alert", "A loss pattern needs admin review.", "pattern_review_alert", "/admin/pattern-review", "alert_demo_pattern"));
+                seedNotificationDeliveries(notificationDeliveries);
                 auditLogs.save(auditLog());
                 users.save(user("user_001", "Jordan Kim", "jordan.kim@pleasantvalley.edu", "student"));
                 users.save(user("user_002", "Avery Patel", "avery.patel@pleasantvalley.edu", "admin"));
+                users.save(user("user_003", "Riley Chen", "riley.chen@pleasantvalley.edu", "student"));
             } catch (DataAccessException exception) {
                 LOGGER.warn("Skipping seed data because MongoDB is unavailable: {}", exception.getMessage());
             }
@@ -526,6 +535,41 @@ public class SeedDataConfig {
         return notification;
     }
 
+    private void seedNotificationDeliveries(NotificationDeliveryRepository notificationDeliveries) {
+        if (notificationDeliveries == null) {
+            return;
+        }
+        notificationDeliveries.saveAll(List.of(
+                delivery("ndel_return_pass_email", "notif_return_pass_demo", "riley.chen@pleasantvalley.edu", "email", "return_pass_ready", "mock_sent", "mock_email", "Return Pass ready - Your Return Pass is ready."),
+                delivery("ndel_return_pass_sms", "notif_return_pass_demo", "riley.chen@pleasantvalley.edu", "sms", "return_pass_ready", "mock_sent", "mock_sms", "Return Pass ready - Your Return Pass is ready."),
+                delivery("ndel_strong_match_email", "notif_001", "jordan.kim@pleasantvalley.edu", "email", "strong_item_match", "mock_sent", "mock_email", "Strong match available - A strong possible match is ready."),
+                delivery("ndel_pattern_webhook", "notif_pattern_review_demo", "avery.patel@pleasantvalley.edu", "webhook", "pattern_review_alert", "mock_sent", "mock_webhook", "Pattern Review alert - A loss pattern needs admin review.")
+        ));
+    }
+
+    private NotificationDelivery delivery(String id, String notificationId, String email, String channel, String eventType, String status, String provider, String preview) {
+        NotificationDelivery delivery = new NotificationDelivery();
+        delivery.setId(id);
+        delivery.setNotificationId(notificationId);
+        delivery.setRecipientUserEmail(email);
+        if ("email".equals(channel)) {
+            delivery.setRecipientEmail(email);
+        }
+        if ("sms".equals(channel)) {
+            delivery.setRecipientPhoneMasked("demo-masked");
+        }
+        delivery.setChannel(channel);
+        delivery.setEventType(eventType);
+        delivery.setDeliveryStatus(status);
+        delivery.setProvider(provider);
+        delivery.setProviderMessageId(provider + "_seed_demo");
+        delivery.setCreatedDate(NOW);
+        delivery.setSentDate(NOW);
+        delivery.setSafeMessagePreview(preview);
+        delivery.setIsDemo(true);
+        return delivery;
+    }
+
     private AuditLog auditLog() {
         AuditLog auditLog = new AuditLog();
         auditLog.setId("audit_001");
@@ -545,6 +589,11 @@ public class SeedDataConfig {
         user.setEmail(email);
         user.setRole(role);
         user.setAvatarUrl("");
+        user.setEmailNotificationsEnabled(true);
+        user.setSmsOptIn(false);
+        user.setSmsNotificationsEnabled(false);
+        user.setWebhookNotificationsEnabled(true);
+        user.setNotificationCategories(List.of("all"));
         user.setCreatedDate(NOW);
         user.setUpdatedDate(NOW);
         return user;

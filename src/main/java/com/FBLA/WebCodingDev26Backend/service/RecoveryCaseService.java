@@ -28,10 +28,13 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 @Service
 public class RecoveryCaseService {
+    private static final Logger LOGGER = LoggerFactory.getLogger(RecoveryCaseService.class);
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
     private static final Set<String> CASE_STATUSES = Set.of(
             "open",
@@ -60,6 +63,7 @@ public class RecoveryCaseService {
     private final PatchMapper mapper;
     private final ClockService clock;
     private final InputSanitizer sanitizer;
+    private final RecoveryPulseDispatcher recoveryPulse;
 
     public RecoveryCaseService(
             RecoveryCaseRepository cases,
@@ -69,7 +73,21 @@ public class RecoveryCaseService {
             PatchMapper mapper,
             ClockService clock
     ) {
-        this(cases, missions, lostReports, null, null, planningService, mapper, clock, new InputSanitizer());
+        this(cases, missions, lostReports, null, null, planningService, mapper, clock, new InputSanitizer(), null);
+    }
+
+    public RecoveryCaseService(
+            RecoveryCaseRepository cases,
+            RecoveryMissionRepository missions,
+            LostReportRepository lostReports,
+            ClaimRepository claims,
+            AuditLogRepository auditLogs,
+            RecoveryPlanningService planningService,
+            PatchMapper mapper,
+            ClockService clock,
+            InputSanitizer sanitizer
+    ) {
+        this(cases, missions, lostReports, claims, auditLogs, planningService, mapper, clock, sanitizer, null);
     }
 
     @Autowired
@@ -82,7 +100,8 @@ public class RecoveryCaseService {
             RecoveryPlanningService planningService,
             PatchMapper mapper,
             ClockService clock,
-            InputSanitizer sanitizer
+            InputSanitizer sanitizer,
+            RecoveryPulseDispatcher recoveryPulse
     ) {
         this.cases = cases;
         this.missions = missions;
@@ -93,6 +112,7 @@ public class RecoveryCaseService {
         this.mapper = mapper;
         this.clock = clock;
         this.sanitizer = sanitizer == null ? new InputSanitizer() : sanitizer;
+        this.recoveryPulse = recoveryPulse;
     }
 
     public List<RecoveryCase> list() {
@@ -183,6 +203,7 @@ public class RecoveryCaseService {
     public RecoveryCase refreshForLostReport(String lostReportId, String adminEmail) {
         LostReport report = lostReports.findById(lostReportId).orElseThrow(() -> new NotFoundException("Lost report not found"));
         RecoveryCase recoveryCase = ensureForLostReport(report);
+        String previousStatus = recoveryCase.getStatus();
         List<RecoveryPlanningService.ZoneRecommendation> recommendations = planningService.recommendZones(report);
         recoveryCase.setEventHubId(report.getEventHubId());
         recoveryCase.setCampusZoneId(report.getCampusZoneId());
@@ -201,6 +222,7 @@ public class RecoveryCaseService {
         recoveryCase.setUpdatedDate(clock.now());
         RecoveryCase saved = cases.save(recoveryCase);
         upsertMissions(saved, recommendations);
+        notifyCaseStatusChanged(saved, previousStatus);
         audit("RECOVERY_PLAN_REFRESHED", "RecoveryCase", saved.getId(), adminEmail,
                 "Refreshed deterministic recovery plan for lost report " + report.getId() + ".");
         return saved;
@@ -212,12 +234,14 @@ public class RecoveryCaseService {
 
     public RecoveryCase update(String id, Map<String, Object> data, String adminEmail) {
         RecoveryCase existing = get(id);
+        String previousStatus = existing.getStatus();
         Map<String, Object> sanitized = sanitizer.sanitizeMap(data);
         RecoveryCase patch = mapper.convert(sanitized, RecoveryCase.class);
         mapper.copyPresent(sanitized, patch, existing, "id", "createdDate", "lostReportId", "caseCode");
         validateCaseStatus(existing.getStatus());
         existing.setUpdatedDate(clock.now());
         RecoveryCase saved = cases.save(existing);
+        notifyCaseStatusChanged(saved, previousStatus);
         audit("RECOVERY_CASE_UPDATED", "RecoveryCase", saved.getId(), adminEmail, "Updated recovery case fields.");
         return saved;
     }
@@ -260,6 +284,7 @@ public class RecoveryCaseService {
         mission.setCreatedDate(valueOrDefault(mission.getCreatedDate(), now));
         mission.setUpdatedDate(now);
         RecoveryMission saved = missions.save(mission);
+        notifyMissionAssigned(saved, null);
         audit("RECOVERY_MISSION_CREATED", "RecoveryMission", saved.getId(), adminEmail,
                 "Created mission for recovery case " + recoveryCase.getId() + ".");
         return saved;
@@ -271,6 +296,7 @@ public class RecoveryCaseService {
 
     public RecoveryMission updateMission(String id, Map<String, Object> data, String adminEmail) {
         RecoveryMission existing = missions.findById(id).orElseThrow(() -> new NotFoundException("Recovery mission not found"));
+        String previousAssignedTo = existing.getAssignedTo();
         Map<String, Object> sanitized = sanitizer.sanitizeMap(data);
         RecoveryMission patch = mapper.convert(sanitized, RecoveryMission.class);
         mapper.copyPresent(sanitized, patch, existing, "id", "createdDate", "recoveryCaseId");
@@ -280,6 +306,7 @@ public class RecoveryCaseService {
         }
         existing.setUpdatedDate(clock.now());
         RecoveryMission saved = missions.save(existing);
+        notifyMissionAssigned(saved, previousAssignedTo);
         audit("RECOVERY_MISSION_UPDATED", "RecoveryMission", saved.getId(), adminEmail, "Updated recovery mission.");
         return saved;
     }
@@ -291,12 +318,14 @@ public class RecoveryCaseService {
         cases.findAll().stream()
                 .filter(recoveryCase -> claim.getFoundItemId().equals(recoveryCase.getSelectedFoundItemId()))
                 .forEach(recoveryCase -> {
+                    String previousStatus = recoveryCase.getStatus();
                     recoveryCase.setLinkedClaimId(claim.getId());
                     if (!"returned".equals(recoveryCase.getStatus()) && !"closed".equals(recoveryCase.getStatus())) {
                         recoveryCase.setStatus("claim_in_review");
                     }
                     recoveryCase.setUpdatedDate(clock.now());
-                    cases.save(recoveryCase);
+                    RecoveryCase saved = cases.save(recoveryCase);
+                    notifyCaseStatusChanged(saved, previousStatus);
                 });
     }
 
@@ -312,11 +341,35 @@ public class RecoveryCaseService {
         cases.findAll().stream()
                 .filter(recoveryCase -> claimId.equals(recoveryCase.getLinkedClaimId()) || foundItemId.equals(recoveryCase.getSelectedFoundItemId()))
                 .forEach(recoveryCase -> {
+                    String previousStatus = recoveryCase.getStatus();
                     recoveryCase.setLinkedClaimId(valueOrDefault(recoveryCase.getLinkedClaimId(), claimId));
                     recoveryCase.setStatus(status);
                     recoveryCase.setUpdatedDate(clock.now());
-                    cases.save(recoveryCase);
+                    RecoveryCase saved = cases.save(recoveryCase);
+                    notifyCaseStatusChanged(saved, previousStatus);
                 });
+    }
+
+    private void notifyCaseStatusChanged(RecoveryCase recoveryCase, String previousStatus) {
+        if (recoveryPulse == null || normalize(recoveryCase.getStatus()).equals(normalize(previousStatus))) {
+            return;
+        }
+        try {
+            recoveryPulse.recoveryCaseStatusUpdated(recoveryCase, previousStatus);
+        } catch (RuntimeException exception) {
+            LOGGER.warn("Unable to dispatch recovery case notification for case {}: {}", recoveryCase.getId(), exception.getMessage());
+        }
+    }
+
+    private void notifyMissionAssigned(RecoveryMission mission, String previousAssignedTo) {
+        if (recoveryPulse == null || isBlank(mission.getAssignedTo()) || normalize(mission.getAssignedTo()).equals(normalize(previousAssignedTo))) {
+            return;
+        }
+        try {
+            recoveryPulse.recoveryMissionAssigned(mission);
+        } catch (RuntimeException exception) {
+            LOGGER.warn("Unable to dispatch recovery mission notification for mission {}: {}", mission.getId(), exception.getMessage());
+        }
     }
 
     private void upsertMissions(RecoveryCase recoveryCase, List<RecoveryPlanningService.ZoneRecommendation> recommendations) {

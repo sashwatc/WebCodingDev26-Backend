@@ -13,7 +13,6 @@ import com.FBLA.WebCodingDev26Backend.model.AppUser;
 import com.FBLA.WebCodingDev26Backend.model.Claim;
 import com.FBLA.WebCodingDev26Backend.model.FoundItem;
 import com.FBLA.WebCodingDev26Backend.model.ItemStatus;
-import com.FBLA.WebCodingDev26Backend.model.Notification;
 import com.FBLA.WebCodingDev26Backend.model.ReturnPass;
 import com.FBLA.WebCodingDev26Backend.repository.ClaimRepository;
 import com.FBLA.WebCodingDev26Backend.repository.FoundItemRepository;
@@ -25,6 +24,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.Base64;
 import java.util.Locale;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -32,10 +32,10 @@ public class ReturnPassService {
     private final ReturnPassRepository returnPasses;
     private final ClaimRepository claims;
     private final FoundItemRepository foundItems;
-    private final NotificationRepository notifications;
     private final CustodyLedgerService custodyLedgerService;
     private final RecoveryCaseService recoveryCaseService;
     private final ClockService clock;
+    private final RecoveryPulseDispatcher recoveryPulse;
     private final SecureRandom random = new SecureRandom();
 
     public ReturnPassService(
@@ -47,13 +47,27 @@ public class ReturnPassService {
             RecoveryCaseService recoveryCaseService,
             ClockService clock
     ) {
+        this(returnPasses, claims, foundItems, notifications, custodyLedgerService, recoveryCaseService, clock, null);
+    }
+
+    @Autowired
+    public ReturnPassService(
+            ReturnPassRepository returnPasses,
+            ClaimRepository claims,
+            FoundItemRepository foundItems,
+            NotificationRepository notifications,
+            CustodyLedgerService custodyLedgerService,
+            RecoveryCaseService recoveryCaseService,
+            ClockService clock,
+            RecoveryPulseDispatcher recoveryPulse
+    ) {
         this.returnPasses = returnPasses;
         this.claims = claims;
         this.foundItems = foundItems;
-        this.notifications = notifications;
         this.custodyLedgerService = custodyLedgerService;
         this.recoveryCaseService = recoveryCaseService;
         this.clock = clock;
+        this.recoveryPulse = recoveryPulse;
     }
 
     public ReturnPassResponse create(String claimId, ReturnPassRequest request, AppUser admin) {
@@ -95,7 +109,9 @@ public class ReturnPassService {
 
         custodyLedgerService.appendEvent(item.getId(), "pickup_ready", admin.getEmail(), admin.getRole(), pass.getPickupLocation(), "Return Pass issued for approved claim.", null);
         recoveryCaseService.markPickupReady(claim.getId(), item.getId());
-        createNotification(claim.getClaimantEmail(), "Your item is ready for pickup", "A Return Pass is active for your approved claim.", "return_pass_ready", "/PickupPass?id=" + saved.getId(), item.getId());
+        if (recoveryPulse != null) {
+            recoveryPulse.returnPassReady(saved);
+        }
         return ReturnPassResponse.from(saved);
     }
 
@@ -162,8 +178,21 @@ public class ReturnPassService {
         custodyLedgerService.appendEvent(item.getId(), "handoff_verified", admin.getEmail(), admin.getRole(), pass.getPickupLocation(), "Pickup station verified the one-time code.", null);
         custodyLedgerService.appendEvent(item.getId(), "returned", admin.getEmail(), admin.getRole(), pass.getPickupLocation(), "Item returned to verified claimant.", null);
         recoveryCaseService.markReturned(claim.getId(), item.getId());
-        createNotification(claim.getClaimantEmail(), "Item returned", "Your pickup was completed at the PVHS pickup station.", "item_returned", "/UserDashboard", item.getId());
+        if (recoveryPulse != null) {
+            recoveryPulse.itemReturned(saved);
+        }
         return ReturnPassResponse.from(saved);
+    }
+
+    public ReturnPassResponse sendPickupReminder(String id, AppUser admin) {
+        ReturnPass pass = returnPasses.findById(id).orElseThrow(() -> new NotFoundException("Return Pass not found"));
+        if (!"active".equalsIgnoreCase(pass.getStatus())) {
+            throw new ConflictException("Pickup reminders can only be sent for active Return Passes.");
+        }
+        if (recoveryPulse != null) {
+            recoveryPulse.pickupReminder(pass);
+        }
+        return ReturnPassResponse.from(pass);
     }
 
     private boolean isExpired(ReturnPass pass) {
@@ -172,21 +201,6 @@ public class ReturnPassService {
         } catch (RuntimeException exception) {
             return true;
         }
-    }
-
-    private void createNotification(String email, String title, String message, String type, String link, String itemId) {
-        Notification notification = new Notification();
-        notification.setId("notif_" + shortId());
-        notification.setUserEmail(email);
-        notification.setTitle(title);
-        notification.setMessage(message);
-        notification.setType(type);
-        notification.setLink(link);
-        notification.setRelatedItemId(itemId);
-        notification.setIsRead(false);
-        notification.setCreatedDate(clock.now());
-        notification.setUpdatedDate(clock.now());
-        notifications.save(notification);
     }
 
     private String generateCode() {

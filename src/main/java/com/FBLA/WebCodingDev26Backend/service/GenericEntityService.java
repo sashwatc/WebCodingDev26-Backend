@@ -44,6 +44,7 @@ public class GenericEntityService {
     private final RecoveryCaseService recoveryCaseService;
     private final CustodyLedgerService custodyLedgerService;
     private final InputSanitizer sanitizer;
+    private final RecoveryPulseDispatcher recoveryPulse;
 
     public GenericEntityService(
             LostReportRepository lostReports,
@@ -53,7 +54,7 @@ public class GenericEntityService {
             PatchMapper mapper,
             ClockService clock
     ) {
-        this(lostReports, claims, notifications, auditLogs, mapper, clock, null, null, null, null, null, new InputSanitizer());
+        this(lostReports, claims, notifications, auditLogs, mapper, clock, null, null, null, null, null, new InputSanitizer(), null);
     }
 
     public GenericEntityService(
@@ -65,7 +66,7 @@ public class GenericEntityService {
             ClockService clock,
             WorkflowService workflow
     ) {
-        this(lostReports, claims, notifications, auditLogs, mapper, clock, workflow, null, null, null, null, new InputSanitizer());
+        this(lostReports, claims, notifications, auditLogs, mapper, clock, workflow, null, null, null, null, new InputSanitizer(), null);
     }
 
     public GenericEntityService(
@@ -80,7 +81,7 @@ public class GenericEntityService {
             RecoveryCaseService recoveryCaseService,
             CustodyLedgerService custodyLedgerService
     ) {
-        this(lostReports, claims, notifications, auditLogs, mapper, clock, null, matchmakingService, foundItems, recoveryCaseService, custodyLedgerService, new InputSanitizer());
+        this(lostReports, claims, notifications, auditLogs, mapper, clock, null, matchmakingService, foundItems, recoveryCaseService, custodyLedgerService, new InputSanitizer(), null);
     }
 
     @Autowired
@@ -96,7 +97,8 @@ public class GenericEntityService {
             FoundItemRepository foundItems,
             RecoveryCaseService recoveryCaseService,
             CustodyLedgerService custodyLedgerService,
-            InputSanitizer sanitizer
+            InputSanitizer sanitizer,
+            RecoveryPulseDispatcher recoveryPulse
     ) {
         this.lostReports = lostReports;
         this.claims = claims;
@@ -110,6 +112,7 @@ public class GenericEntityService {
         this.recoveryCaseService = recoveryCaseService;
         this.custodyLedgerService = custodyLedgerService;
         this.sanitizer = sanitizer;
+        this.recoveryPulse = recoveryPulse;
     }
 
     public List<?> list(String entityName) {
@@ -138,6 +141,9 @@ public class GenericEntityService {
                 markFoundItemForTerminalClaim(claim);
             }
             appendClaimCustodyEvent(claim, "claim_submitted");
+            if (recoveryPulse != null) {
+                recoveryPulse.claimSubmitted(claim);
+            }
         }
         return saved;
     }
@@ -165,6 +171,9 @@ public class GenericEntityService {
         if (saved instanceof Claim claim && isTerminalClaimStatus(claim.getStatus())) {
             markFoundItemForTerminalClaim(claim);
             appendClaimCustodyEvent(claim, "approved".equalsIgnoreCase(claim.getStatus()) ? "claim_approved" : "returned");
+        }
+        if (saved instanceof Claim claim && recoveryPulse != null) {
+            dispatchClaimStatusNotification(claim, (Claim) previous);
         }
         if (saved instanceof LostReport lostReport) {
             return refreshMatches(lostReport);
@@ -299,6 +308,21 @@ public class GenericEntityService {
         return normalized.isBlank() || List.of("submitted", "pending_review", "under_review", "need_more_info").contains(normalized);
     }
 
+    private void dispatchClaimStatusNotification(Claim claim, Claim previous) {
+        String status = normalizeStatus(claim.getStatus());
+        if (status.equals(normalizeStatus(previous == null ? null : previous.getStatus()))) {
+            return;
+        }
+        switch (status) {
+            case "need_more_info" -> recoveryPulse.claimStatusChanged(claim, "claim_more_info_requested");
+            case "approved" -> recoveryPulse.claimStatusChanged(claim, "claim_approved");
+            case "rejected" -> recoveryPulse.claimStatusChanged(claim, "claim_rejected");
+            case "completed" -> recoveryPulse.claimStatusChanged(claim, "item_returned");
+            default -> {
+            }
+        }
+    }
+
     private void appendClaimCustodyEvent(Claim claim, String eventType) {
         if (custodyLedgerService == null || claim.getFoundItemId() == null || claim.getFoundItemId().isBlank()) {
             return;
@@ -382,6 +406,10 @@ public class GenericEntityService {
 
     private String valueOrDefault(String value, String fallback) {
         return value == null || value.isBlank() ? fallback : value;
+    }
+
+    private String normalizeStatus(String status) {
+        return status == null ? "" : status.trim().toLowerCase(Locale.ROOT);
     }
 
     private LostReport refreshMatches(LostReport lostReport) {

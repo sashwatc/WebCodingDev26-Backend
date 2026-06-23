@@ -6,4 +6,5 @@ import org.springframework.data.mongodb.repository.MongoRepository;
 
 public interface NotificationRepository extends MongoRepository<Notification, String> {
     List<Notification> findByUserEmail(String userEmail);
+    List<Notification> findByUserEmailOrderByCreatedDateDesc(String userEmail);
 }

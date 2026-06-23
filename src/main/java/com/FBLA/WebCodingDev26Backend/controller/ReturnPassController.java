@@ -55,4 +55,13 @@ public class ReturnPassController {
         AppUser admin = authorizationService.requireAdmin(userEmail);
         return returnPassService.redeem(id, request, admin);
     }
+
+    @PostMapping("/api/return-passes/{id}/reminder")
+    public ReturnPassResponse sendPickupReminder(
+            @PathVariable String id,
+            @RequestHeader(value = "X-Demo-User-Email", required = false) String userEmail
+    ) {
+        AppUser admin = authorizationService.requireAdmin(userEmail);
+        return returnPassService.sendPickupReminder(id, admin);
+    }
 }

@@ -22,10 +22,13 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 @Service
 public class LossSentinelService {
+    private static final Logger LOGGER = LoggerFactory.getLogger(LossSentinelService.class);
     private static final int MIN_RECENT_REPORTS = 3;
     private static final int MIN_BASELINE_REPORTS = 2;
     private static final Set<String> CLOSED_STATUSES = Set.of("dismissed", "resolved");
@@ -39,6 +42,7 @@ public class LossSentinelService {
     private final PatchMapper mapper;
     private final ClockService clock;
     private final InputSanitizer sanitizer;
+    private final RecoveryPulseDispatcher recoveryPulse;
 
     public LossSentinelService(
             PreventionAlertRepository alerts,
@@ -47,7 +51,20 @@ public class LossSentinelService {
             PatchMapper mapper,
             ClockService clock
     ) {
-        this(alerts, lostReports, zones, null, null, mapper, clock, new InputSanitizer());
+        this(alerts, lostReports, zones, null, null, mapper, clock, new InputSanitizer(), null);
+    }
+
+    public LossSentinelService(
+            PreventionAlertRepository alerts,
+            LostReportRepository lostReports,
+            CampusZoneRepository zones,
+            RecoveryCaseService recoveryCaseService,
+            AuditLogRepository auditLogs,
+            PatchMapper mapper,
+            ClockService clock,
+            InputSanitizer sanitizer
+    ) {
+        this(alerts, lostReports, zones, recoveryCaseService, auditLogs, mapper, clock, sanitizer, null);
     }
 
     @Autowired
@@ -59,7 +76,8 @@ public class LossSentinelService {
             AuditLogRepository auditLogs,
             PatchMapper mapper,
             ClockService clock,
-            InputSanitizer sanitizer
+            InputSanitizer sanitizer,
+            RecoveryPulseDispatcher recoveryPulse
     ) {
         this.alerts = alerts;
         this.lostReports = lostReports;
@@ -69,6 +87,7 @@ public class LossSentinelService {
         this.mapper = mapper;
         this.clock = clock;
         this.sanitizer = sanitizer == null ? new InputSanitizer() : sanitizer;
+        this.recoveryPulse = recoveryPulse;
     }
 
     public List<PreventionAlert> list() {
@@ -131,6 +150,7 @@ public class LossSentinelService {
                     today.toString()
             );
             PreventionAlert alert = existingByKey.get(key);
+            boolean isNewAlert = alert == null;
             if (alert != null && isResolved(alert.getStatus())) {
                 continue;
             }
@@ -165,7 +185,11 @@ public class LossSentinelService {
             alert.setStatus(valueOrDefault(alert.getStatus(), "open"));
             alert.setCalculatedAt(calculatedAt);
             alert.setIsDemo(counts.observedDemo && counts.baselineDemo);
-            savedAlerts.add(alerts.save(alert));
+            PreventionAlert saved = alerts.save(alert);
+            savedAlerts.add(saved);
+            if (isNewAlert) {
+                notifyPatternReviewAlert(saved);
+            }
         }
 
         if (savedAlerts.isEmpty()) {
@@ -324,6 +348,17 @@ public class LossSentinelService {
         log.setDetails(details);
         log.setCreatedDate(clock.now());
         auditLogs.save(log);
+    }
+
+    private void notifyPatternReviewAlert(PreventionAlert alert) {
+        if (recoveryPulse == null) {
+            return;
+        }
+        try {
+            recoveryPulse.patternReviewAlert(alert);
+        } catch (RuntimeException exception) {
+            LOGGER.warn("Unable to dispatch Pattern Review alert notification {}: {}", alert.getId(), exception.getMessage());
+        }
     }
 
     private record GroupKey(String campusZoneId, String category) {
