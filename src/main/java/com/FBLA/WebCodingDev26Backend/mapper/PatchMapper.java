@@ -16,7 +16,8 @@ public class PatchMapper {
     private final ObjectMapper objectMapper;
 
     public PatchMapper(ObjectMapper objectMapper) {
-        this.objectMapper = objectMapper;
+        this.objectMapper = objectMapper.copy();
+        this.objectMapper.configure(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
     }
 
     public <T> T convert(Map<String, Object> data, Class<T> type) {
