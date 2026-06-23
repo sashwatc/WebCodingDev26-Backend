@@ -1,41 +1,29 @@
-# Lost Then Found Backend
+# Lost Then Found
 
-Spring Boot backend for the Lost Then Found Vite/React frontend.
+School lost-and-found recovery platform built for FBLA Website Coding & Development / NLC-level judging.
 
-## Stack
+## Architecture Inspected
 
-- Java 21
-- Spring Boot 4.1.0
-- Maven
-- Spring Web MVC
-- Spring Data MongoDB
-- Validation
-- MongoDB Atlas, database `lostthenfound`
+- Frontend: this checkout did not include the referenced sibling Vite/React app, so the upgraded demo UI is a focused static HTML/CSS/JavaScript app served from Spring Boot `src/main/resources/static`.
+- Routing: browser routes use the History API, with Spring MVC forwarding `/`, `/report-lost`, `/report-found`, `/browse`, `/claim`, `/admin`, and `/sources` to `index.html`.
+- Backend: Java 21, Spring Boot 4.1, Spring Web MVC, Bean Validation, Spring Data MongoDB.
+- Database: MongoDB Atlas or local MongoDB through `MONGO_URI` and `MONGO_DATABASE`.
+- Core models: `FoundItem`, `LostReport`, `Claim`, `AppUser`, `Notification`, `AuditLog`, `MatchSuggestion`.
+- Auth: demo-safe role access. `ADMIN_EMAIL` becomes the admin account when signing in through `/api/auth/signin`.
 
-## MongoDB Setup
-
-Create a MongoDB Atlas cluster and set these environment variables before running the app:
-
-```env
-MONGO_URI=mongodb+srv://USERNAME:PASSWORD@lostthenfound.3rv5ips.mongodb.net/lostthenfound?retryWrites=true&w=majority&appName=LostThenFound
-MONGO_DATABASE=lostthenfound
-```
-
-Do not include angle brackets around the real password, and do not commit `.env`, `.env.local`, or other local secret files.
-
-The production/default Spring profile expects `MONGO_URI` to be present. For a safe local profile example, see `src/main/resources/application-local.properties`.
-
-Because this repo is on Spring Boot 4.1, Mongo connection settings are wired through Spring Boot's `spring.mongodb.*` properties while still reading the same `MONGO_URI` and `MONGO_DATABASE` environment variables.
-
-## Run Locally
+## Local Setup
 
 ```bash
-export MONGO_URI="mongodb+srv://USERNAME:PASSWORD@lostthenfound.3rv5ips.mongodb.net/lostthenfound?retryWrites=true&w=majority&appName=LostThenFound"
-export MONGO_DATABASE=lostthenfound
-./mvnw spring-boot:run
+cp .env.example .env
 ```
 
-The backend runs on:
+Fill in `MONGO_URI`, `MONGO_DATABASE`, and `ADMIN_EMAIL`. For a local MongoDB profile:
+
+```bash
+SPRING_PROFILES_ACTIVE=local ./mvnw spring-boot:run
+```
+
+Default app URL:
 
 ```text
 http://localhost:8080
@@ -47,23 +35,24 @@ Health check:
 GET http://localhost:8080/api/health
 ```
 
-Expected shape:
+## Scripts
 
-```json
-{
-  "status": "ok",
-  "database": "mongodb",
-  "connected": true
-}
+```bash
+./mvnw spring-boot:run
+./mvnw test
+npm run backend
+npm run dev
 ```
+
+`npm run backend` and `npm run dev` both delegate to Spring Boot in this repo.
 
 ## Environment Variables
 
-```text
-PORT=8080
-MONGO_URI=mongodb+srv://USERNAME:PASSWORD@lostthenfound.3rv5ips.mongodb.net/lostthenfound?retryWrites=true&w=majority&appName=LostThenFound
+```env
+MONGO_URI=fill_this_in
 MONGO_DATABASE=lostthenfound
-FRONTEND_URL=https://your-frontend.example.com
+PORT=8080
+FRONTEND_URL=http://localhost:8080
 ADMIN_EMAIL=avery.patel@pleasantvalley.edu
 SEED_DATA_ENABLED=true
 AI_MATCHMAKING_ENABLED=true
@@ -72,55 +61,42 @@ AI_MATCHMAKING_BASE_URL=https://api.openai.com/v1/chat/completions
 AI_MATCHMAKING_MODEL=gpt-4o-mini
 AI_MATCHMAKING_MAX_CANDIDATES=8
 AI_MATCHMAKING_MIN_CONFIDENCE=35
+EMAIL_DEMO_MODE=true
+EMAIL_FROM=lostthenfound@pvhs.demo
+PICKUP_LOCATION=PVHS Main Office pickup station
+PICKUP_HOURS=School days, 8:00 AM-3:30 PM
 ```
 
-`AI_API_KEY` is optional. When it is missing or AI matchmaking is disabled, the backend still generates matches with the built-in local scorer.
+`AI_API_KEY` is optional. If it is missing or AI matchmaking is disabled, the backend uses the local explainable scorer.
 
-## Data
+`EMAIL_DEMO_MODE=true` logs safe email previews and saves notifications without requiring SMTP, SendGrid, or a paid service.
 
-MongoDB collections:
+## Web Routes
 
-- `found_items`
-- `lost_reports`
-- `claims`
-- `notifications`
-- `audit_logs`
-- `users`
-- `recovery_cases`
-- `recovery_missions`
-- `campus_zones`
-- `event_recovery_hubs`
-- `custody_events`
-- `asset_registry`
-- `return_passes`
-- `prevention_alerts`
-- `recovery_nodes`
-- `partner_relays`
-
-Seed data is inserted only when the `found_items` collection is empty and `SEED_DATA_ENABLED` is true.
-
-## Frontend Integration
-
-For local Vite proxy mode, point the frontend proxy to:
-
-```text
-http://127.0.0.1:8080
-```
-
-For split deployments, build the frontend with:
-
-```bash
-VITE_API_URL=https://your-backend.example.com npm run build
-```
+- `/` - Home and judge-ready workflow overview
+- `/report-lost` - Student lost report form with possible matches after submit
+- `/report-found` - Found item intake with private verification clue and photo validation
+- `/browse` - Public-safe found item cards
+- `/claim` - Claim form with secret ownership detail
+- `/admin` - Admin dashboard for claims, reports, items, archive actions, and audit log
+- `/sources` - Sources and license notes
 
 ## API Routes
 
-- `GET /api/health`
 - `GET /api/items`
+- `GET /api/items/{id}`
 - `POST /api/items`
 - `PATCH /api/items/{id}`
 - `DELETE /api/items/{id}`
 - `GET /api/admin/items`
+- `GET /api/admin/dashboard`
+- `GET /api/admin/lost-reports`
+- `GET /api/admin/claims`
+- `GET /api/admin/audit-logs`
+- `GET /api/admin/notifications`
+- `POST /api/admin/claims/{id}/approve`
+- `POST /api/admin/claims/{id}/deny`
+- `POST /api/admin/items/{id}/archive`
 - `GET /api/entities/{entityName}`
 - `POST /api/entities/{entityName}`
 - `PATCH /api/entities/{entityName}/{id}`
@@ -131,26 +107,85 @@ VITE_API_URL=https://your-backend.example.com npm run build
 - `GET /api/auth/user?email={email}`
 - `POST /api/auth/signin`
 - `POST /api/uploads`
-- Recovery Mesh endpoints are documented in `docs/RECOVERY_MESH_API_CONTRACT.md`.
 
-Supported generic entities:
+Supported generic entities: `LostReport`, `Claim`, `Notification`, `AuditLog`.
 
-- `LostReport`
-- `Claim`
-- `Notification`
-- `AuditLog`
+Admin routes require the `X-Demo-User-Email` header and an admin user seeded or signed in with `ADMIN_EMAIL`.
 
-## Tests
+## Matching Workflow
 
-Tests mock the service layer where appropriate so Atlas is not required during CI/local verification.
+When a lost report is created, `MatchmakingService` compares it against eligible found items. The local scorer is intentionally easy to explain:
+
+- Category match: large score
+- Brand and color match: medium score
+- Description keyword overlap: fuzzy score
+- Location similarity: fuzzy score
+- Date proximity: within 1, 3, or 7 days
+- Tags: extra supporting score
+
+Matches above the configured confidence threshold are saved on the lost report and displayed as "Possible Matches."
+
+## Claim Verification
+
+Public found-item cards redact sensitive data such as storage location, finder contact, internal item code, and private verification clues.
+
+Item statuses used by the upgraded workflow:
+
+- `FOUND`
+- `CLAIM_PENDING`
+- `VERIFIED`
+- `ARCHIVED`
+
+Claims are stored separately in the `claims` collection. Students submit an identifying detail, and admins approve or deny it from `/admin`.
+
+## Security And Validation
+
+- Recursive backend sanitization strips HTML/script tags from submitted text.
+- Lost reports, found items, and claim forms validate required fields.
+- Uploads allow only `jpg`, `jpeg`, `png`, or `webp`.
+- Uploads are rejected above 2MB.
+- Admin routes use role-based demo access through the current auth system.
+- Public DTOs do not expose private verification clues, finder contact, storage location, or item codes.
+- Email and AI configuration stay in environment variables.
+
+## Seeded Demo Data
+
+Seed data is inserted when `SEED_DATA_ENABLED=true` and `found_items` is empty.
+
+Examples included:
+
+- Lost calculator report
+- Found AirPods report
+- Pending AirPods claim
+- Approved calculator claim
+- Admin user: `avery.patel@pleasantvalley.edu`
+
+## Judge Demo Flow
+
+1. Open `http://localhost:8080`.
+2. Go to `Report Lost Item` and submit the default calculator report.
+3. Show the `Possible Matches` result and explain the scoring reasons.
+4. Click `Claim This Item` and submit a secret ownership detail.
+5. Open `Admin Dashboard` and sign in as `Avery Patel` with `avery.patel@pleasantvalley.edu`.
+6. Approve the pending claim.
+7. Show the item status change, the Notifications tab email preview, and the audit log entry.
+8. Archive a resolved item from the admin found-items tab.
+
+## Deployment
+
+Deploy as a standard Spring Boot application:
+
+```bash
+./mvnw clean package
+java -jar target/WebCodingDev26Backend-0.0.1-SNAPSHOT.jar
+```
+
+Set production environment variables in the host platform instead of committing secrets. The static web UI is packaged into the same Spring Boot jar.
+
+## Verification
 
 ```bash
 ./mvnw test
 ```
 
-## Current Limitations
-
-- Auth intentionally matches the current simple frontend flow; no JWT/security layer yet.
-- Uploads return the submitted `data_url` through an upload service abstraction. Cloud storage can be added there later.
-- AI matchmaking sends only item details to the configured AI endpoint, not student contact fields.
-- Event hubs, beacons, display mode, asset lookup, and partner relays are demo/integration-ready adapters, not live PVHS system integrations.
+Current verification: 35 tests passing.

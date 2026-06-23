@@ -1,5 +1,6 @@
 package com.FBLA.WebCodingDev26Backend.service;
 
+import com.FBLA.WebCodingDev26Backend.exception.BadRequestException;
 import com.FBLA.WebCodingDev26Backend.exception.ConflictException;
 import com.FBLA.WebCodingDev26Backend.exception.NotFoundException;
 import com.FBLA.WebCodingDev26Backend.exception.UnsupportedEntityException;
@@ -7,15 +8,19 @@ import com.FBLA.WebCodingDev26Backend.mapper.PatchMapper;
 import com.FBLA.WebCodingDev26Backend.model.AuditLog;
 import com.FBLA.WebCodingDev26Backend.model.Claim;
 import com.FBLA.WebCodingDev26Backend.model.LostReport;
+import com.FBLA.WebCodingDev26Backend.model.ItemStatus;
 import com.FBLA.WebCodingDev26Backend.model.Notification;
 import com.FBLA.WebCodingDev26Backend.repository.AuditLogRepository;
 import com.FBLA.WebCodingDev26Backend.repository.ClaimRepository;
 import com.FBLA.WebCodingDev26Backend.repository.FoundItemRepository;
 import com.FBLA.WebCodingDev26Backend.repository.LostReportRepository;
 import com.FBLA.WebCodingDev26Backend.repository.NotificationRepository;
+import java.time.LocalDate;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,6 +30,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class GenericEntityService {
     private static final Logger LOGGER = LoggerFactory.getLogger(GenericEntityService.class);
+    private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
 
     private final LostReportRepository lostReports;
     private final ClaimRepository claims;
@@ -37,6 +43,7 @@ public class GenericEntityService {
     private final FoundItemRepository foundItems;
     private final RecoveryCaseService recoveryCaseService;
     private final CustodyLedgerService custodyLedgerService;
+    private final InputSanitizer sanitizer;
 
     public GenericEntityService(
             LostReportRepository lostReports,
@@ -46,7 +53,7 @@ public class GenericEntityService {
             PatchMapper mapper,
             ClockService clock
     ) {
-        this(lostReports, claims, notifications, auditLogs, mapper, clock, null, null, null, null, null);
+        this(lostReports, claims, notifications, auditLogs, mapper, clock, null, null, null, null, null, new InputSanitizer());
     }
 
     public GenericEntityService(
@@ -58,7 +65,7 @@ public class GenericEntityService {
             ClockService clock,
             WorkflowService workflow
     ) {
-        this(lostReports, claims, notifications, auditLogs, mapper, clock, workflow, null, null, null, null);
+        this(lostReports, claims, notifications, auditLogs, mapper, clock, workflow, null, null, null, null, new InputSanitizer());
     }
 
     public GenericEntityService(
@@ -73,7 +80,7 @@ public class GenericEntityService {
             RecoveryCaseService recoveryCaseService,
             CustodyLedgerService custodyLedgerService
     ) {
-        this(lostReports, claims, notifications, auditLogs, mapper, clock, null, matchmakingService, foundItems, recoveryCaseService, custodyLedgerService);
+        this(lostReports, claims, notifications, auditLogs, mapper, clock, null, matchmakingService, foundItems, recoveryCaseService, custodyLedgerService, new InputSanitizer());
     }
 
     @Autowired
@@ -88,7 +95,8 @@ public class GenericEntityService {
             MatchmakingService matchmakingService,
             FoundItemRepository foundItems,
             RecoveryCaseService recoveryCaseService,
-            CustodyLedgerService custodyLedgerService
+            CustodyLedgerService custodyLedgerService,
+            InputSanitizer sanitizer
     ) {
         this.lostReports = lostReports;
         this.claims = claims;
@@ -101,6 +109,7 @@ public class GenericEntityService {
         this.foundItems = foundItems;
         this.recoveryCaseService = recoveryCaseService;
         this.custodyLedgerService = custodyLedgerService;
+        this.sanitizer = sanitizer;
     }
 
     public List<?> list(String entityName) {
@@ -109,7 +118,8 @@ public class GenericEntityService {
 
     public Object create(String entityName, Map<String, Object> data) {
         EntityAdapter<?> adapter = adapter(entityName);
-        Object entity = mapper.convert(data, adapter.type());
+        Map<String, Object> sanitizedData = sanitizer.sanitizeMap(data);
+        Object entity = mapper.convert(sanitizedData, adapter.type());
         applyCreateDefaults(entity, adapter.prefix());
         validateCreate(entity);
         if (entity instanceof Claim claim && workflow != null) {
@@ -123,6 +133,7 @@ public class GenericEntityService {
             recoveryCaseService.onClaimSubmitted(claim);
         }
         if (saved instanceof Claim claim) {
+            markFoundItemForPendingClaim(claim);
             if (isTerminalClaimStatus(claim.getStatus())) {
                 markFoundItemForTerminalClaim(claim);
             }
@@ -134,10 +145,11 @@ public class GenericEntityService {
     public Object update(String entityName, String id, Map<String, Object> data) {
         EntityAdapter<?> adapter = adapter(entityName);
         Object existing = adapter.repository().findById(id).orElseThrow(() -> new NotFoundException(entityName + " not found"));
+        Map<String, Object> sanitizedData = sanitizer.sanitizeMap(data);
         Object previous = mapper.convert(Map.of(), adapter.type());
         mapper.copyNonNull(existing, previous);
-        Object patch = mapper.convert(data, adapter.type());
-        mapper.copyPresent(data, patch, existing, "id", "createdDate");
+        Object patch = mapper.convert(sanitizedData, adapter.type());
+        mapper.copyPresent(sanitizedData, patch, existing, "id", "createdDate");
         validateUpdate(existing);
         applyUpdateTimestamp(existing);
         if (existing instanceof Claim claim && workflow != null) {
@@ -219,9 +231,15 @@ public class GenericEntityService {
     }
 
     private void validateCreate(Object entity) {
+        if (entity instanceof LostReport lostReport) {
+            validateLostReport(lostReport);
+        }
         if (entity instanceof Claim claim) {
             validateClaimReferencesInventory(claim);
             validateNoDuplicateTerminalClaim(claim);
+            if (!isTerminalClaimStatus(claim.getStatus())) {
+                validateClaimForm(claim);
+            }
         }
     }
 
@@ -229,7 +247,27 @@ public class GenericEntityService {
         if (entity instanceof Claim claim) {
             validateClaimReferencesInventory(claim);
             validateNoDuplicateTerminalClaim(claim);
+            if (!isTerminalClaimStatus(claim.getStatus())) {
+                validateClaimForm(claim);
+            }
         }
+    }
+
+    private void validateLostReport(LostReport report) {
+        require(report.getTitle(), "Item title is required");
+        require(report.getCategory(), "Category is required");
+        requireEmail(report.getContactEmail(), "Valid contact email is required");
+        if (report.getDateLost() != null && !report.getDateLost().isBlank()) {
+            parseDate(report.getDateLost(), "Date lost must use YYYY-MM-DD format");
+        }
+    }
+
+    private void validateClaimForm(Claim claim) {
+        require(claim.getFoundItemId(), "found_item_id is required");
+        require(claim.getClaimantName(), "Claimant name is required");
+        requireEmail(claim.getClaimantEmail(), "Valid claimant email is required");
+        require(claim.getClaimReason(), "Claim reason is required");
+        require(claim.getIdentifyingDetails(), "A private identifying detail is required");
     }
 
     private void validateClaimReferencesInventory(Claim claim) {
@@ -256,6 +294,11 @@ public class GenericEntityService {
         return status != null && (status.equalsIgnoreCase("approved") || status.equalsIgnoreCase("completed"));
     }
 
+    private boolean isPendingClaimStatus(String status) {
+        String normalized = status == null ? "" : status.trim().toLowerCase(Locale.ROOT);
+        return normalized.isBlank() || List.of("submitted", "pending_review", "under_review", "need_more_info").contains(normalized);
+    }
+
     private void appendClaimCustodyEvent(Claim claim, String eventType) {
         if (custodyLedgerService == null || claim.getFoundItemId() == null || claim.getFoundItemId().isBlank()) {
             return;
@@ -280,8 +323,8 @@ public class GenericEntityService {
             return;
         }
         foundItems.findById(claim.getFoundItemId()).ifPresent(item -> {
-            if ("approved".equalsIgnoreCase(claim.getStatus()) && !"returned".equalsIgnoreCase(item.getStatus())) {
-                item.setStatus("claimed");
+            if ("approved".equalsIgnoreCase(claim.getStatus()) && !ItemStatus.isArchived(item.getStatus())) {
+                item.setStatus(ItemStatus.VERIFIED);
                 item.setUpdatedDate(clock.now());
                 foundItems.save(item);
             }
@@ -297,6 +340,40 @@ public class GenericEntityService {
                 }
             }
         });
+    }
+
+    private void markFoundItemForPendingClaim(Claim claim) {
+        if (foundItems == null || claim.getFoundItemId() == null || claim.getFoundItemId().isBlank() || !isPendingClaimStatus(claim.getStatus())) {
+            return;
+        }
+        foundItems.findById(claim.getFoundItemId()).ifPresent(item -> {
+            String status = ItemStatus.canonical(item.getStatus());
+            if (!ItemStatus.isArchived(status) && !ItemStatus.VERIFIED.equals(status)) {
+                item.setStatus(ItemStatus.CLAIM_PENDING);
+                item.setUpdatedDate(clock.now());
+                foundItems.save(item);
+            }
+        });
+    }
+
+    private void require(String value, String message) {
+        if (value == null || value.isBlank()) {
+            throw new BadRequestException(message);
+        }
+    }
+
+    private void requireEmail(String value, String message) {
+        if (value == null || value.isBlank() || !EMAIL_PATTERN.matcher(value).matches()) {
+            throw new BadRequestException(message);
+        }
+    }
+
+    private void parseDate(String value, String message) {
+        try {
+            LocalDate.parse(value);
+        } catch (RuntimeException exception) {
+            throw new BadRequestException(message);
+        }
     }
 
     private String valueOrGenerated(String value, String prefix) {

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Lost Then Found">
+  <rect width="64" height="64" rx="14" fill="oklch(0.28 0.07 205)"/>
+  <path d="M17 20.5c0-3 2.4-5.5 5.5-5.5h19c3 0 5.5 2.4 5.5 5.5v23c0 3-2.4 5.5-5.5 5.5h-19c-3 0-5.5-2.4-5.5-5.5v-23Z" fill="oklch(0.94 0.03 195)"/>
+  <path d="M23 26h18M23 33h18M23 40h11" stroke="oklch(0.28 0.07 205)" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="45" cy="43" r="7" fill="oklch(0.67 0.16 145)"/>
+</svg>

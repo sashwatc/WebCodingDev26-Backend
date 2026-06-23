@@ -4,6 +4,7 @@ import com.FBLA.WebCodingDev26Backend.exception.BadRequestException;
 import com.FBLA.WebCodingDev26Backend.exception.NotFoundException;
 import com.FBLA.WebCodingDev26Backend.model.Claim;
 import com.FBLA.WebCodingDev26Backend.model.FoundItem;
+import com.FBLA.WebCodingDev26Backend.model.ItemStatus;
 import com.FBLA.WebCodingDev26Backend.model.LostReport;
 import com.FBLA.WebCodingDev26Backend.repository.ClaimRepository;
 import com.FBLA.WebCodingDev26Backend.repository.FoundItemRepository;
@@ -137,7 +138,7 @@ public class WorkflowService {
 
         FoundItem foundItem = foundItems.findById(claim.getFoundItemId())
                 .orElseThrow(() -> new NotFoundException("Claim must reference an existing Found Item"));
-        if (Set.of("returned", "archived").contains(normalize(foundItem.getStatus())) && !"completed".equals(claim.getStatus())) {
+        if (ItemStatus.isArchived(foundItem.getStatus()) && !"completed".equals(claim.getStatus())) {
             throw new BadRequestException("This Found Item is no longer available for claims");
         }
         if (previousClaim == null && Set.of("approved", "completed").contains(normalize(claim.getStatus()))) {
@@ -164,7 +165,7 @@ public class WorkflowService {
         }
 
         if ("approved".equals(claim.getStatus())) {
-            item.setStatus("claimed");
+            item.setStatus(ItemStatus.VERIFIED);
             item.setUpdatedDate(clock.now());
             foundItems.save(item);
             return;
@@ -185,7 +186,7 @@ public class WorkflowService {
                     .anyMatch(existingClaim -> !Objects.equals(existingClaim.getId(), claim.getId())
                             && Set.of("approved", "completed").contains(normalize(existingClaim.getStatus())));
             if (!stillApproved) {
-                item.setStatus("approved");
+                item.setStatus(ItemStatus.FOUND);
                 item.setUpdatedDate(clock.now());
                 foundItems.save(item);
             }
@@ -196,7 +197,7 @@ public class WorkflowService {
         if (report == null || item == null || blank(item.getId())) {
             return null;
         }
-        if ("lost".equals(normalize(item.getRecordType())) || Set.of("returned", "archived").contains(normalize(item.getStatus()))) {
+        if ("lost".equals(normalize(item.getRecordType())) || ItemStatus.isArchived(item.getStatus()) || ItemStatus.CLAIM_PENDING.equals(ItemStatus.canonical(item.getStatus())) || ItemStatus.VERIFIED.equals(ItemStatus.canonical(item.getStatus()))) {
             return null;
         }
 

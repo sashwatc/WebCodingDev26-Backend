@@ -12,6 +12,7 @@ import com.FBLA.WebCodingDev26Backend.exception.NotFoundException;
 import com.FBLA.WebCodingDev26Backend.model.AppUser;
 import com.FBLA.WebCodingDev26Backend.model.Claim;
 import com.FBLA.WebCodingDev26Backend.model.FoundItem;
+import com.FBLA.WebCodingDev26Backend.model.ItemStatus;
 import com.FBLA.WebCodingDev26Backend.model.Notification;
 import com.FBLA.WebCodingDev26Backend.model.ReturnPass;
 import com.FBLA.WebCodingDev26Backend.repository.ClaimRepository;
@@ -62,11 +63,11 @@ public class ReturnPassService {
         }
 
         FoundItem item = foundItems.findById(claim.getFoundItemId()).orElseThrow(() -> new NotFoundException("Found item not found"));
-        if ("returned".equalsIgnoreCase(item.getStatus())) {
+        if (ItemStatus.isArchived(item.getStatus())) {
             throw new ConflictException("Returned items cannot receive a new Return Pass.");
         }
-        if (!"claimed".equalsIgnoreCase(item.getStatus())) {
-            throw new ConflictException("Found item must be claimed before creating a Return Pass.");
+        if (!"claimed".equalsIgnoreCase(item.getStatus()) && !ItemStatus.VERIFIED.equals(ItemStatus.canonical(item.getStatus()))) {
+            throw new ConflictException("Found item must be verified before creating a Return Pass.");
         }
 
         returnPasses.findByClaimId(claimId).stream()
@@ -136,7 +137,7 @@ public class ReturnPassService {
 
         Claim claim = claims.findById(pass.getClaimId()).orElseThrow(() -> new NotFoundException("Claim not found"));
         FoundItem item = foundItems.findById(pass.getFoundItemId()).orElseThrow(() -> new NotFoundException("Found item not found"));
-        if ("returned".equalsIgnoreCase(item.getStatus()) || "completed".equalsIgnoreCase(claim.getStatus())) {
+        if (ItemStatus.isArchived(item.getStatus()) || "completed".equalsIgnoreCase(claim.getStatus())) {
             throw new ConflictException("This pickup has already been completed.");
         }
 
@@ -152,7 +153,7 @@ public class ReturnPassService {
         claim.setUpdatedDate(now);
         claims.save(claim);
 
-        item.setStatus("returned");
+        item.setStatus(ItemStatus.ARCHIVED);
         item.setClaimConfirmed(true);
         item.setClaimConfirmedAt(now);
         item.setUpdatedDate(now);

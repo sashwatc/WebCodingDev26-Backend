@@ -1,0 +1,16 @@
+{
+  "name": "Lost Then Found",
+  "short_name": "LTF",
+  "description": "Secure school lost-and-found recovery workflow.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "oklch(0.985 0.004 200)",
+  "theme_color": "oklch(0.650 0.100 200)",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

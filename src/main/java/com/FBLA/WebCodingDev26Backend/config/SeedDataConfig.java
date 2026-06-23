@@ -7,6 +7,7 @@ import com.FBLA.WebCodingDev26Backend.model.CampusZone;
 import com.FBLA.WebCodingDev26Backend.model.Claim;
 import com.FBLA.WebCodingDev26Backend.model.EventRecoveryHub;
 import com.FBLA.WebCodingDev26Backend.model.FoundItem;
+import com.FBLA.WebCodingDev26Backend.model.ItemStatus;
 import com.FBLA.WebCodingDev26Backend.model.LostReport;
 import com.FBLA.WebCodingDev26Backend.model.MatchSuggestion;
 import com.FBLA.WebCodingDev26Backend.model.Notification;
@@ -201,7 +202,7 @@ public class SeedDataConfig {
     }
 
     private void seedItems(FoundItemRepository foundItems) {
-        FoundItem bottle = foundItem("found_001", "Black Hydro Flask Water Bottle", "food_containers", "Matte black Hydro Flask bottle with a top carry handle and screw cap.", "Black", "Hydro Flask", "Gymnasium", "2026-03-11", "12:15", "approved", "FB-2026-HF82");
+        FoundItem bottle = foundItem("found_001", "Black Hydro Flask Water Bottle", "food_containers", "Matte black Hydro Flask bottle with a top carry handle and screw cap.", "Black", "Hydro Flask", "Gymnasium", "2026-03-11", "12:15", ItemStatus.FOUND, "FB-2026-HF82");
         bottle.setPhotoUrls(List.of("/items/black-hydro-flask.jpg"));
         bottle.setTags(List.of("water bottle", "hydro flask", "black", "gym"));
         bottle.setStorageLocation("Main Office shelf B2");
@@ -209,12 +210,12 @@ public class SeedDataConfig {
         bottle.setFinderEmail("coach.miller@pleasantvalley.edu");
         bottle.setFinderRole("staff");
 
-        FoundItem backpack = foundItem("found_002", "Blue JanSport Backpack", "bags_cases", "Royal blue JanSport backpack with math notebook and tennis keychain.", "Blue", "JanSport", "Student Lounge", "2026-03-09", "15:05", "claimed", "FB-2026-JS27");
+        FoundItem backpack = foundItem("found_002", "Blue JanSport Backpack", "bags_cases", "Royal blue JanSport backpack with math notebook and tennis keychain.", "Blue", "JanSport", "Student Lounge", "2026-03-09", "15:05", ItemStatus.VERIFIED, "FB-2026-JS27");
         backpack.setPhotoUrls(List.of("/images/blue-backpack.png"));
         backpack.setTags(List.of("backpack", "jansport", "blue", "student lounge"));
         backpack.setStorageLocation("Counselor office storage closet");
 
-        FoundItem airpods = foundItem("found_airpods_game", "Black AirPods-style Case", "electronics", "Black wireless earbud case found after the basketball game.", "Black", "Apple", "Gym Bleachers", "2026-03-14", "20:40", "approved", "FB-2026-AP14");
+        FoundItem airpods = foundItem("found_airpods_game", "Black AirPods-style Case", "electronics", "Black wireless earbud case found after the basketball game.", "Black", "Apple", "Gym Bleachers", "2026-03-14", "20:40", ItemStatus.FOUND, "FB-2026-AP14");
         airpods.setEventHubId("hub_basketball_game");
         airpods.setCampusZoneId("zone_gym_bleachers");
         airpods.setPhotoUrls(List.of("/items/black-airpods-case.jpg"));
@@ -222,26 +223,33 @@ public class SeedDataConfig {
         airpods.setPrivateVerificationClues(List.of("small silver initials on the hinge", "tiny scratch along the left back corner"));
         airpods.setStorageLocation("Main Office sealed bin A1");
 
-        FoundItem passItem = foundItem("found_claimed_calculator", "Silver Graphing Calculator", "electronics", "TI-style graphing calculator found near the gym entrance.", "Silver", "Texas Instruments", "Gym Entrance", "2026-03-14", "19:30", "claimed", "FB-2026-CAL77");
+        FoundItem calculator = foundItem("found_calculator_demo", "Silver Graphing Calculator", "electronics", "Silver graphing calculator found near the gym entrance.", "Silver", "Texas Instruments", "Gym Entrance", "2026-03-14", "19:30", ItemStatus.FOUND, "FB-2026-CAL55");
+        calculator.setEventHubId("hub_basketball_game");
+        calculator.setCampusZoneId("zone_gym_entrance");
+        calculator.setPrivateVerificationClues(List.of("name label under the slide cover", "faint star sticker on the back"));
+        calculator.setTags(List.of("calculator", "silver", "texas instruments", "gym entrance"));
+        calculator.setStorageLocation("Main Office sealed bin A2");
+
+        FoundItem passItem = foundItem("found_claimed_calculator", "Silver Graphing Calculator", "electronics", "TI-style graphing calculator found near the gym entrance.", "Silver", "Texas Instruments", "Gym Entrance", "2026-03-14", "19:30", ItemStatus.VERIFIED, "FB-2026-CAL77");
         passItem.setEventHubId("hub_basketball_game");
         passItem.setCampusZoneId("zone_gym_entrance");
         passItem.setPrivateVerificationClues(List.of("name label under the slide cover"));
         passItem.setStorageLocation("Main Office pickup drawer");
 
-        FoundItem returned = foundItem("found_returned_lanyard", "PVHS Lanyard With Keys", "personal_items", "Blue PVHS lanyard with two keys.", "Blue", "PVHS", "Athletics Office", "2026-03-13", "17:20", "returned", "FB-2026-KEY22");
+        FoundItem returned = foundItem("found_returned_lanyard", "PVHS Lanyard With Keys", "personal_items", "Blue PVHS lanyard with two keys.", "Blue", "PVHS", "Athletics Office", "2026-03-13", "17:20", ItemStatus.ARCHIVED, "FB-2026-KEY22");
         returned.setEventHubId("hub_basketball_game");
         returned.setCampusZoneId("zone_athletics");
         returned.setClaimConfirmed(true);
         returned.setClaimConfirmedAt("2026-03-14T16:30:00Z");
 
-        FoundItem chromebook = foundItem("found_asset_chromebook", "PVHS Chromebook", "electronics", "School-owned Chromebook with asset tag.", "Gray", "Lenovo", "Library Study Area", "2026-03-12", "11:05", "approved", "FB-2026-CB1042");
+        FoundItem chromebook = foundItem("found_asset_chromebook", "PVHS Chromebook", "electronics", "School-owned Chromebook with asset tag.", "Gray", "Lenovo", "Library Study Area", "2026-03-12", "11:05", ItemStatus.FOUND, "FB-2026-CB1042");
         chromebook.setAssetTag("PVHS-CB-1042");
         chromebook.setAssetRecordId("asset_cb_1042");
         chromebook.setDepartmentDestination("Technology Office");
         chromebook.setRestrictedVisibility(true);
         chromebook.setStorageLocation("Technology Office intake shelf");
 
-        foundItems.saveAll(List.of(bottle, backpack, airpods, passItem, returned, chromebook));
+        foundItems.saveAll(List.of(bottle, backpack, airpods, calculator, passItem, returned, chromebook));
     }
 
     private void seedLostReports(LostReportRepository lostReports) {
@@ -255,6 +263,13 @@ public class SeedDataConfig {
         airpods.setUrgency("high");
         airpods.setMatchedItems(List.of(match("found_airpods_game", "Black AirPods-style Case", 94)));
         lostReports.save(airpods);
+
+        LostReport calculator = lostReport("lost_calculator_demo", "Lost silver graphing calculator", "electronics", "Silver Texas Instruments calculator with a name label under the slide cover.", "Silver", "Texas Instruments", "Gym Entrance", "2026-03-14", "riley.chen@pleasantvalley.edu");
+        calculator.setEventHubId("hub_basketball_game");
+        calculator.setCampusZoneId("zone_gym_entrance");
+        calculator.setUrgency("high");
+        calculator.setMatchedItems(List.of(match("found_calculator_demo", "Silver Graphing Calculator", 97)));
+        lostReports.save(calculator);
     }
 
     private void seedClaims(ClaimRepository claims) {

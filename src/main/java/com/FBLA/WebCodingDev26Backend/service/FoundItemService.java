@@ -1,9 +1,11 @@
 package com.FBLA.WebCodingDev26Backend.service;
 
+import com.FBLA.WebCodingDev26Backend.exception.BadRequestException;
 import com.FBLA.WebCodingDev26Backend.exception.NotFoundException;
 import com.FBLA.WebCodingDev26Backend.dto.PublicFoundItemResponse;
 import com.FBLA.WebCodingDev26Backend.mapper.PatchMapper;
 import com.FBLA.WebCodingDev26Backend.model.FoundItem;
+import com.FBLA.WebCodingDev26Backend.model.ItemStatus;
 import com.FBLA.WebCodingDev26Backend.model.LostReport;
 import com.FBLA.WebCodingDev26Backend.model.Rating;
 import com.FBLA.WebCodingDev26Backend.repository.AssetRegistryRecordRepository;
@@ -12,6 +14,7 @@ import com.FBLA.WebCodingDev26Backend.repository.CustodyEventRepository;
 import com.FBLA.WebCodingDev26Backend.repository.FoundItemRepository;
 import com.FBLA.WebCodingDev26Backend.repository.LostReportRepository;
 import com.FBLA.WebCodingDev26Backend.repository.RecoveryCaseRepository;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -37,13 +40,14 @@ public class FoundItemService {
     private final RecoveryCaseRepository recoveryCases;
     private final LostReportRepository lostReports;
     private final CustodyLedgerService custodyLedgerService;
+    private final InputSanitizer sanitizer;
 
     public FoundItemService(FoundItemRepository repository, PatchMapper mapper, ClockService clock) {
-        this(repository, mapper, clock, null, null, null, null, null, null, null, null);
+        this(repository, mapper, clock, null, null, null, null, null, null, null, null, new InputSanitizer());
     }
 
     public FoundItemService(FoundItemRepository repository, PatchMapper mapper, ClockService clock, WorkflowService workflow) {
-        this(repository, mapper, clock, workflow, null, null, null, null, null, null, null);
+        this(repository, mapper, clock, workflow, null, null, null, null, null, null, null, new InputSanitizer());
     }
 
     public FoundItemService(
@@ -58,7 +62,7 @@ public class FoundItemService {
             LostReportRepository lostReports,
             CustodyLedgerService custodyLedgerService
     ) {
-        this(repository, mapper, clock, null, matchmakingService, assetRegistry, claims, custodyEvents, recoveryCases, lostReports, custodyLedgerService);
+        this(repository, mapper, clock, null, matchmakingService, assetRegistry, claims, custodyEvents, recoveryCases, lostReports, custodyLedgerService, new InputSanitizer());
     }
 
     @Autowired
@@ -73,7 +77,8 @@ public class FoundItemService {
             CustodyEventRepository custodyEvents,
             RecoveryCaseRepository recoveryCases,
             LostReportRepository lostReports,
-            CustodyLedgerService custodyLedgerService
+            CustodyLedgerService custodyLedgerService,
+            InputSanitizer sanitizer
     ) {
         this.repository = repository;
         this.mapper = mapper;
@@ -86,6 +91,7 @@ public class FoundItemService {
         this.recoveryCases = recoveryCases;
         this.lostReports = lostReports;
         this.custodyLedgerService = custodyLedgerService;
+        this.sanitizer = sanitizer;
     }
 
     public List<PublicFoundItemResponse> list() {
@@ -108,12 +114,14 @@ public class FoundItemService {
     }
 
     public FoundItem create(Map<String, Object> data) {
-        FoundItem item = mapper.convert(data, FoundItem.class);
+        Map<String, Object> sanitizedData = sanitizer.sanitizeMap(data);
+        FoundItem item = mapper.convert(sanitizedData, FoundItem.class);
+        validateFoundItem(item);
         String now = clock.now();
         item.setId(valueOrGenerated(item.getId(), "found"));
         item.setCreatedDate(valueOrDefault(item.getCreatedDate(), now));
         item.setUpdatedDate(valueOrDefault(item.getUpdatedDate(), now));
-        item.setStatus(valueOrDefault(item.getStatus(), "pending_review"));
+        item.setStatus(valueOrDefault(item.getStatus(), ItemStatus.FOUND));
         item.setRecordType(valueOrDefault(item.getRecordType(), "found"));
         item.setIsFlagged(Boolean.TRUE.equals(item.getIsFlagged()));
         item.setClaimConfirmed(Boolean.TRUE.equals(item.getClaimConfirmed()));
@@ -126,20 +134,22 @@ public class FoundItemService {
 
     public FoundItem update(String id, Map<String, Object> data) {
         FoundItem existing = repository.findById(id).orElseThrow(() -> new NotFoundException("Found item not found"));
+        Map<String, Object> sanitizedData = sanitizer.sanitizeMap(data);
 
-        if (data.containsKey("upsertRating") || data.containsKey("upsert_rating")) {
-            return upsertRating(existing, data.getOrDefault("upsertRating", data.get("upsert_rating")));
+        if (sanitizedData.containsKey("upsertRating") || sanitizedData.containsKey("upsert_rating")) {
+            return upsertRating(existing, sanitizedData.getOrDefault("upsertRating", sanitizedData.get("upsert_rating")));
         }
 
-        if (data.containsKey("removeRatingByClaimId") || data.containsKey("remove_rating_by_claim_id")) {
-            String claimId = String.valueOf(data.getOrDefault("removeRatingByClaimId", data.get("remove_rating_by_claim_id")));
+        if (sanitizedData.containsKey("removeRatingByClaimId") || sanitizedData.containsKey("remove_rating_by_claim_id")) {
+            String claimId = String.valueOf(sanitizedData.getOrDefault("removeRatingByClaimId", sanitizedData.get("remove_rating_by_claim_id")));
             existing.getRatings().removeIf(rating -> claimId.equals(rating.getClaimId()));
             existing.setUpdatedDate(clock.now());
             return repository.save(existing);
         }
 
-        FoundItem patch = mapper.convert(data, FoundItem.class);
-        mapper.copyPresent(data, patch, existing, "id", "createdDate");
+        FoundItem patch = mapper.convert(sanitizedData, FoundItem.class);
+        mapper.copyPresent(sanitizedData, patch, existing, "id", "createdDate");
+        validateFoundItem(existing);
         applyAssetRegistryDefaults(existing);
         existing.setUpdatedDate(clock.now());
         FoundItem savedItem = repository.save(existing);
@@ -150,7 +160,7 @@ public class FoundItemService {
     public Map<String, Object> delete(String id) {
         FoundItem existing = repository.findById(id).orElseThrow(() -> new NotFoundException("Found item not found"));
         if (hasFoundItemReferences(id)) {
-            existing.setStatus("archived");
+            existing.setStatus(ItemStatus.ARCHIVED);
             existing.setUpdatedDate(clock.now());
             FoundItem archivedItem = repository.save(existing);
             appendCustody(archivedItem, "archived", "Found item archived instead of hard-deleted because related records exist.");
@@ -161,9 +171,31 @@ public class FoundItemService {
     }
 
     public boolean isPubliclyVisible(FoundItem item) {
-        String status = normalize(item.getStatus());
         return !Boolean.TRUE.equals(item.getRestrictedVisibility())
-                && status.equals("approved");
+                && ItemStatus.isPubliclyVisible(item.getStatus());
+    }
+
+    private void validateFoundItem(FoundItem item) {
+        if (item == null) {
+            throw new BadRequestException("Found item payload is required");
+        }
+        if (item.getTitle() == null || item.getTitle().isBlank()) {
+            throw new BadRequestException("Item title is required");
+        }
+        if (item.getCategory() == null || item.getCategory().isBlank()) {
+            throw new BadRequestException("Category is required");
+        }
+        if (item.getLocationFound() == null || item.getLocationFound().isBlank()) {
+            throw new BadRequestException("Location found is required");
+        }
+        if (item.getDateFound() == null || item.getDateFound().isBlank()) {
+            throw new BadRequestException("Date found is required");
+        }
+        try {
+            LocalDate.parse(item.getDateFound());
+        } catch (RuntimeException exception) {
+            throw new BadRequestException("Date found must use YYYY-MM-DD format");
+        }
     }
 
     private FoundItem upsertRating(FoundItem existing, Object ratingValue) {

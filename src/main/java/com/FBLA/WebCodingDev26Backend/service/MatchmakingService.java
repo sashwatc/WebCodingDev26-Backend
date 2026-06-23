@@ -2,6 +2,7 @@ package com.FBLA.WebCodingDev26Backend.service;
 
 import com.FBLA.WebCodingDev26Backend.exception.NotFoundException;
 import com.FBLA.WebCodingDev26Backend.model.FoundItem;
+import com.FBLA.WebCodingDev26Backend.model.ItemStatus;
 import com.FBLA.WebCodingDev26Backend.model.LostReport;
 import com.FBLA.WebCodingDev26Backend.model.MatchSuggestion;
 import com.FBLA.WebCodingDev26Backend.repository.FoundItemRepository;
@@ -22,8 +23,7 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class MatchmakingService {
-    private static final Set<String> TERMINAL_FOUND_STATUSES = Set.of("claimed", "returned", "archived", "deleted");
-    private static final Set<String> MATCHABLE_FOUND_STATUSES = Set.of("approved");
+    private static final Set<String> MATCHABLE_FOUND_STATUSES = Set.of(ItemStatus.FOUND, "approved");
     private static final Set<String> STOP_WORDS = Set.of(
             "a", "an", "and", "are", "at", "case", "for", "in", "is", "it", "lost", "missing", "of", "on", "the",
             "to", "was", "with"
@@ -259,6 +259,11 @@ public class MatchmakingService {
         int score = 0;
         List<String> reasons = new ArrayList<>();
 
+        // Explainable NLC demo algorithm:
+        // 1. Award large points for stable facts students can describe: category, brand, and color.
+        // 2. Add smaller points for fuzzy evidence: keyword overlap, similar campus location, close dates, and tags.
+        // 3. Keep only candidates above the confidence threshold, then sort highest first for "Possible Matches."
+        // The final decision still belongs to an admin after a private claim detail is reviewed.
         if (sameText(report.getCategory(), item.getCategory())) {
             score += 30;
             reasons.add("category match");
@@ -302,8 +307,8 @@ public class MatchmakingService {
     private boolean eligibleFoundItem(FoundItem item) {
         String status = normalize(item.getStatus());
         return !Boolean.TRUE.equals(item.getRestrictedVisibility())
-                && MATCHABLE_FOUND_STATUSES.contains(status)
-                && !TERMINAL_FOUND_STATUSES.contains(status);
+                && MATCHABLE_FOUND_STATUSES.contains(ItemStatus.canonical(status))
+                && !ItemStatus.isUnavailableForMatching(status);
     }
 
     private boolean eligibleLostReport(LostReport report) {
