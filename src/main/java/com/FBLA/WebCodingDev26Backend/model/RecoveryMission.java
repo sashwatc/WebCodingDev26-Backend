@@ -26,8 +26,10 @@ public class RecoveryMission {
     private String completedBy;
     private String completedDate;
     private String notes;
+    private String sourceAlertId;
     private String createdDate;
     private String updatedDate;
+    private Boolean isDemo;
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
@@ -61,8 +63,12 @@ public class RecoveryMission {
     public void setCompletedDate(String completedDate) { this.completedDate = completedDate; }
     public String getNotes() { return notes; }
     public void setNotes(String notes) { this.notes = notes; }
+    public String getSourceAlertId() { return sourceAlertId; }
+    public void setSourceAlertId(String sourceAlertId) { this.sourceAlertId = sourceAlertId; }
     public String getCreatedDate() { return createdDate; }
     public void setCreatedDate(String createdDate) { this.createdDate = createdDate; }
     public String getUpdatedDate() { return updatedDate; }
     public void setUpdatedDate(String updatedDate) { this.updatedDate = updatedDate; }
+    public Boolean getIsDemo() { return isDemo; }
+    public void setIsDemo(Boolean isDemo) { this.isDemo = isDemo; }
 }

@@ -3,16 +3,21 @@ package com.FBLA.WebCodingDev26Backend.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.FBLA.WebCodingDev26Backend.config.JacksonConfig;
 import com.FBLA.WebCodingDev26Backend.dto.CustodyVerificationResponse;
+import com.FBLA.WebCodingDev26Backend.dto.DemoScenarioResponse;
+import com.FBLA.WebCodingDev26Backend.dto.PatternReviewResult;
 import com.FBLA.WebCodingDev26Backend.dto.PartnerRelayResponse;
 import com.FBLA.WebCodingDev26Backend.dto.PublicFoundItemResponse;
+import com.FBLA.WebCodingDev26Backend.dto.RecoveryCenterResponse;
 import com.FBLA.WebCodingDev26Backend.dto.ReturnPassRedeemRequest;
 import com.FBLA.WebCodingDev26Backend.dto.ReturnPassRequest;
+import com.FBLA.WebCodingDev26Backend.exception.BadRequestException;
 import com.FBLA.WebCodingDev26Backend.exception.ConflictException;
 import com.FBLA.WebCodingDev26Backend.mapper.PatchMapper;
 import com.FBLA.WebCodingDev26Backend.model.Claim;
@@ -22,6 +27,8 @@ import com.FBLA.WebCodingDev26Backend.model.FoundItem;
 import com.FBLA.WebCodingDev26Backend.model.LostReport;
 import com.FBLA.WebCodingDev26Backend.model.PartnerRelay;
 import com.FBLA.WebCodingDev26Backend.model.PreventionAlert;
+import com.FBLA.WebCodingDev26Backend.model.RecoveryCase;
+import com.FBLA.WebCodingDev26Backend.model.RecoveryMission;
 import com.FBLA.WebCodingDev26Backend.model.ReturnPass;
 import com.FBLA.WebCodingDev26Backend.repository.AuditLogRepository;
 import com.FBLA.WebCodingDev26Backend.repository.CampusZoneRepository;
@@ -42,8 +49,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -232,7 +241,7 @@ class RecoveryMeshRulesTest {
     }
 
     @Test
-    void sentinelIgnoresInsufficientSamplesAndDetectsSpike() {
+    void sentinelReturnsNotEnoughDataInsteadOfFabricatingAlert() {
         LossSentinelService service = new LossSentinelService(preventionAlerts, lostReports, campusZones, mapper(), clock());
 
         when(lostReports.findAll()).thenReturn(List.of(
@@ -241,18 +250,40 @@ class RecoveryMeshRulesTest {
                 lost("lost_3", "zone_gym", "electronics", "2026-06-21")
         ));
         when(preventionAlerts.findAll()).thenReturn(List.of());
-        service.recompute();
+        PatternReviewResult result = service.recompute();
+
+        assertThat(result.state()).isEqualTo("not_enough_data");
+        assertThat(result.alerts()).isEmpty();
         verify(preventionAlerts, never()).save(any(PreventionAlert.class));
+    }
+
+    @Test
+    void sentinelUsesRealLostReportSourcesAndDetectsSpikeWithBaseline() {
+        LossSentinelService service = new LossSentinelService(preventionAlerts, lostReports, campusZones, mapper(), clock());
 
         when(lostReports.findAll()).thenReturn(List.of(
-                lost("lost_1", "zone_gym", "electronics", "2026-06-21"),
-                lost("lost_2", "zone_gym", "electronics", "2026-06-21"),
-                lost("lost_3", "zone_gym", "electronics", "2026-06-21"),
+                lost("lost_base_1", "zone_gym", "electronics", "2026-05-20"),
+                lost("lost_base_2", "zone_gym", "electronics", "2026-06-01"),
+                lost("lost_1", "zone_gym", "electronics", "2026-06-18"),
+                lost("lost_2", "zone_gym", "electronics", "2026-06-19"),
+                lost("lost_3", "zone_gym", "electronics", "2026-06-20"),
                 lost("lost_4", "zone_gym", "electronics", "2026-06-21")
         ));
+        when(preventionAlerts.findAll()).thenReturn(List.of());
         when(preventionAlerts.save(any(PreventionAlert.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        service.recompute();
-        verify(preventionAlerts).save(any(PreventionAlert.class));
+
+        PatternReviewResult result = service.recompute();
+
+        assertThat(result.state()).isEqualTo("alerts_created");
+        assertThat(result.alerts()).hasSize(1);
+        PreventionAlert alert = result.alerts().get(0);
+        assertThat(alert.getObservedCount()).isEqualTo(4);
+        assertThat(alert.getBaselineCount()).isEqualTo(1);
+        assertThat(alert.getSourceLostReportIds()).containsExactly("lost_1", "lost_2", "lost_3", "lost_4");
+        assertThat(alert.getBaselineWindowStart()).isEqualTo("2026-05-16");
+        assertThat(alert.getBaselineWindowEnd()).isEqualTo("2026-06-14");
+        assertThat(alert.getCalculatedAt()).isEqualTo("2026-06-22T12:00:00Z");
+        verify(preventionAlerts).save(alert);
     }
 
     @Test
@@ -271,9 +302,11 @@ class RecoveryMeshRulesTest {
 
         when(preventionAlerts.findAll()).thenReturn(List.of(existing));
         when(lostReports.findAll()).thenReturn(List.of(
-                lost("lost_1", "zone_gym", "electronics", "2026-06-21"),
-                lost("lost_2", "zone_gym", "electronics", "2026-06-21"),
-                lost("lost_3", "zone_gym", "electronics", "2026-06-21"),
+                lost("lost_base_1", "zone_gym", "electronics", "2026-05-20"),
+                lost("lost_base_2", "zone_gym", "electronics", "2026-06-01"),
+                lost("lost_1", "zone_gym", "electronics", "2026-06-18"),
+                lost("lost_2", "zone_gym", "electronics", "2026-06-19"),
+                lost("lost_3", "zone_gym", "electronics", "2026-06-20"),
                 lost("lost_4", "zone_gym", "electronics", "2026-06-21")
         ));
         when(preventionAlerts.save(any(PreventionAlert.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -283,7 +316,168 @@ class RecoveryMeshRulesTest {
         verify(preventionAlerts).save(existing);
         assertThat(existing.getId()).isEqualTo("alert_existing");
         assertThat(existing.getObservedCount()).isEqualTo(4);
+        assertThat(existing.getSourceLostReportIds()).containsExactly("lost_1", "lost_2", "lost_3", "lost_4");
         assertThat(existing.getCreatedDate()).isEqualTo("2026-06-22T09:00:00Z");
+    }
+
+    @Test
+    void sentinelAlertCanExposeSourceReportsAndCreateRecoveryMission() {
+        RecoveryCaseService recoveryCaseWorkflow = org.mockito.Mockito.mock(RecoveryCaseService.class);
+        LossSentinelService service = new LossSentinelService(
+                preventionAlerts,
+                lostReports,
+                campusZones,
+                recoveryCaseWorkflow,
+                auditLogs,
+                mapper(),
+                clock(),
+                new InputSanitizer()
+        );
+        PreventionAlert alert = new PreventionAlert();
+        alert.setId("alert_gym");
+        alert.setCategory("electronics");
+        alert.setCampusZoneId("zone_gym");
+        alert.setSeverity("high");
+        alert.setSourceLostReportIds(List.of("lost_1"));
+        alert.setSuggestedActions(List.of("Create recovery mission"));
+        alert.setReasons(List.of("4 recent reports"));
+        LostReport source = lost("lost_1", "zone_gym", "electronics", "2026-06-21");
+        RecoveryCase recoveryCase = recoveryCase("case_1", "lost_1", "open");
+        RecoveryMission mission = mission("mission_alert", "case_1", "zone_gym", "Gym", 90, "high", "open");
+
+        when(preventionAlerts.findById("alert_gym")).thenReturn(Optional.of(alert));
+        when(lostReports.findById("lost_1")).thenReturn(Optional.of(source));
+        when(recoveryCaseWorkflow.ensureForLostReport(source)).thenReturn(recoveryCase);
+        when(recoveryCaseWorkflow.createMission(any(), any(), any())).thenReturn(mission);
+        when(auditLogs.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        assertThat(service.sourceReports("alert_gym")).extracting(LostReport::getId).containsExactly("lost_1");
+        RecoveryMission created = service.createMissionFromAlert("alert_gym", "avery.patel@pleasantvalley.edu");
+
+        assertThat(created.getId()).isEqualTo("mission_alert");
+        verify(recoveryCaseWorkflow).createMission(any(), any(), any());
+        verify(auditLogs).save(any());
+    }
+
+    @Test
+    void recoveryCenterSummaryIsComputedFromStoredCasesMissionsAndClaims() {
+        RecoveryCaseService service = new RecoveryCaseService(
+                recoveryCases,
+                recoveryMissions,
+                lostReports,
+                claims,
+                auditLogs,
+                new RecoveryPlanningService(campusZones, foundItems),
+                mapper(),
+                clock(),
+                new InputSanitizer()
+        );
+        RecoveryCase open = recoveryCase("case_open", "lost_open", "open");
+        RecoveryCase pickup = recoveryCase("case_pickup", "lost_pickup", "pickup_ready");
+        RecoveryMission openMission = mission("mission_open", "case_open", "zone_gym", "Gym", 75, "high", "open");
+        RecoveryMission completedMission = mission("mission_done", "case_open", "zone_gym", "Gym", 75, "high", "completed");
+        Claim pendingClaim = claim("claim_pending_review", "found_001", "pending_review");
+        Claim rejectedClaim = claim("claim_rejected", "found_002", "rejected");
+
+        when(recoveryCases.findAll()).thenReturn(List.of(open, pickup));
+        when(recoveryMissions.findByRecoveryCaseId("case_open")).thenReturn(List.of(openMission, completedMission));
+        when(recoveryMissions.findByRecoveryCaseId("case_pickup")).thenReturn(List.of());
+        when(lostReports.findById("lost_open")).thenReturn(Optional.of(lost("lost_open", "zone_gym", "electronics", "2026-06-21")));
+        when(lostReports.findById("lost_pickup")).thenReturn(Optional.of(lost("lost_pickup", "zone_library", "books", "2026-06-21")));
+        when(claims.findAll()).thenReturn(List.of(pendingClaim, rejectedClaim));
+
+        RecoveryCenterResponse response = service.center();
+
+        assertThat(response.summary().activeCases()).isEqualTo(2);
+        assertThat(response.summary().openMissions()).isEqualTo(1);
+        assertThat(response.summary().claimsAwaitingReview()).isEqualTo(1);
+        assertThat(response.summary().pickupReadyCases()).isEqualTo(1);
+        assertThat(response.cases()).extracting(item -> item.recoveryCase().getId()).containsExactly("case_open", "case_pickup");
+    }
+
+    @Test
+    void recoveryCaseCreationRequiresAndPersistsRealLostReport() {
+        RecoveryCaseService service = new RecoveryCaseService(
+                recoveryCases,
+                recoveryMissions,
+                lostReports,
+                claims,
+                auditLogs,
+                new RecoveryPlanningService(campusZones, foundItems),
+                mapper(),
+                clock(),
+                new InputSanitizer()
+        );
+        when(lostReports.save(any(LostReport.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(recoveryCases.findByLostReportId(any())).thenReturn(Optional.empty());
+        when(recoveryCases.save(any(RecoveryCase.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(auditLogs.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        RecoveryCase recoveryCase = service.createFromLostReportData(Map.of(
+                "title", "Lost calculator",
+                "category", "electronics",
+                "contact_email", "riley.chen@pleasantvalley.edu"
+        ), "avery.patel@pleasantvalley.edu");
+
+        ArgumentCaptor<LostReport> reportCaptor = ArgumentCaptor.forClass(LostReport.class);
+        verify(lostReports).save(reportCaptor.capture());
+        assertThat(reportCaptor.getValue().getId()).startsWith("lost_");
+        assertThat(recoveryCase.getLostReportId()).isEqualTo(reportCaptor.getValue().getId());
+        assertThatThrownBy(() -> service.ensureForLostReport(new LostReport()))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void demoScenarioCreatesRealDemoDomainRecordsWithoutWipingData() {
+        RecoveryCaseService recoveryCaseWorkflow = org.mockito.Mockito.mock(RecoveryCaseService.class);
+        LossSentinelService sentinel = org.mockito.Mockito.mock(LossSentinelService.class);
+        DemoScenarioService service = new DemoScenarioService(
+                lostReports,
+                foundItems,
+                claims,
+                auditLogs,
+                recoveryCaseWorkflow,
+                sentinel,
+                clock(),
+                new InputSanitizer()
+        );
+        RecoveryCase recoveryCase = recoveryCase("case_demo", "lost_demo", "open");
+        recoveryCase.setIsDemo(true);
+        AtomicInteger missionCounter = new AtomicInteger();
+
+        when(lostReports.save(any(LostReport.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(foundItems.save(any(FoundItem.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(claims.save(any(Claim.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(auditLogs.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(recoveryCaseWorkflow.ensureForLostReport(any(LostReport.class))).thenReturn(recoveryCase);
+        when(recoveryCaseWorkflow.createMission(any(), any(), any())).thenAnswer(invocation -> {
+            RecoveryMission mission = new RecoveryMission();
+            mission.setId("mission_demo_" + missionCounter.incrementAndGet());
+            mission.setRecoveryCaseId("case_demo");
+            mission.setIsDemo(true);
+            return mission;
+        });
+        when(recoveryCaseWorkflow.update(any(), any(), any())).thenReturn(recoveryCase);
+
+        DemoScenarioResponse response = service.create("airpods_gym", Map.of(), "avery.patel@pleasantvalley.edu");
+
+        assertThat(response.lostReportIds()).hasSize(1);
+        assertThat(response.recoveryCaseIds()).containsExactly("case_demo");
+        assertThat(response.recoveryMissionIds()).containsExactly("mission_demo_1", "mission_demo_2");
+        assertThat(response.foundItemIds()).hasSize(1);
+        assertThat(response.claimIds()).hasSize(1);
+
+        ArgumentCaptor<LostReport> lostCaptor = ArgumentCaptor.forClass(LostReport.class);
+        ArgumentCaptor<FoundItem> foundCaptor = ArgumentCaptor.forClass(FoundItem.class);
+        ArgumentCaptor<Claim> claimCaptor = ArgumentCaptor.forClass(Claim.class);
+        verify(lostReports).save(lostCaptor.capture());
+        verify(foundItems, atLeastOnce()).save(foundCaptor.capture());
+        verify(claims).save(claimCaptor.capture());
+        assertThat(lostCaptor.getValue().getIsDemo()).isTrue();
+        assertThat(foundCaptor.getValue().getIsDemo()).isTrue();
+        assertThat(claimCaptor.getValue().getIsDemo()).isTrue();
+        verify(foundItems, never()).deleteById(any());
+        verify(lostReports, never()).deleteById(any());
     }
 
     @Test
@@ -335,6 +529,31 @@ class RecoveryMeshRulesTest {
         claim.setClaimantEmail("student@pleasantvalley.edu");
         claim.setStatus(status);
         return claim;
+    }
+
+    private RecoveryCase recoveryCase(String id, String lostReportId, String status) {
+        RecoveryCase recoveryCase = new RecoveryCase();
+        recoveryCase.setId(id);
+        recoveryCase.setLostReportId(lostReportId);
+        recoveryCase.setStatus(status);
+        recoveryCase.setCaseCode("PVHS-RM-" + id);
+        recoveryCase.setCreatedDate("2026-06-22T12:00:00Z");
+        recoveryCase.setUpdatedDate("2026-06-22T12:00:00Z");
+        return recoveryCase;
+    }
+
+    private RecoveryMission mission(String id, String caseId, String zoneId, String zoneLabel, int score, String priority, String status) {
+        RecoveryMission mission = new RecoveryMission();
+        mission.setId(id);
+        mission.setRecoveryCaseId(caseId);
+        mission.setCampusZoneId(zoneId);
+        mission.setZoneLabel(zoneLabel);
+        mission.setScore(score);
+        mission.setPriority(priority);
+        mission.setStatus(status);
+        mission.setCreatedDate("2026-06-22T12:00:00Z");
+        mission.setUpdatedDate("2026-06-22T12:00:00Z");
+        return mission;
     }
 
     private ReturnPass pass(String id, String claimId, String foundItemId, String status, String code, String expiresAt) {

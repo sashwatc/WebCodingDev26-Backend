@@ -1,7 +1,10 @@
 package com.FBLA.WebCodingDev26Backend.controller;
 
+import com.FBLA.WebCodingDev26Backend.dto.PatternReviewResult;
 import com.FBLA.WebCodingDev26Backend.model.AppUser;
+import com.FBLA.WebCodingDev26Backend.model.LostReport;
 import com.FBLA.WebCodingDev26Backend.model.PreventionAlert;
+import com.FBLA.WebCodingDev26Backend.model.RecoveryMission;
 import com.FBLA.WebCodingDev26Backend.service.DemoAuthorizationService;
 import com.FBLA.WebCodingDev26Backend.service.LossSentinelService;
 import java.util.List;
@@ -33,7 +36,7 @@ public class LossSentinelController {
     }
 
     @PostMapping("/recompute")
-    public List<PreventionAlert> recompute(@RequestHeader(value = "X-Demo-User-Email", required = false) String userEmail) {
+    public PatternReviewResult recompute(@RequestHeader(value = "X-Demo-User-Email", required = false) String userEmail) {
         authorizationService.requireAdmin(userEmail);
         return lossSentinelService.recompute();
     }
@@ -46,5 +49,52 @@ public class LossSentinelController {
     ) {
         AppUser admin = authorizationService.requireAdmin(userEmail);
         return lossSentinelService.update(id, data, admin.getEmail());
+    }
+
+    @PostMapping("/alerts/{id}/acknowledge")
+    public PreventionAlert acknowledge(
+            @PathVariable String id,
+            @RequestHeader(value = "X-Demo-User-Email", required = false) String userEmail
+    ) {
+        AppUser admin = authorizationService.requireAdmin(userEmail);
+        return lossSentinelService.acknowledge(id, admin.getEmail());
+    }
+
+    @PostMapping("/alerts/{id}/dismiss")
+    public PreventionAlert dismiss(
+            @PathVariable String id,
+            @RequestBody(required = false) Map<String, Object> data,
+            @RequestHeader(value = "X-Demo-User-Email", required = false) String userEmail
+    ) {
+        AppUser admin = authorizationService.requireAdmin(userEmail);
+        return lossSentinelService.dismiss(id, admin.getEmail(), data);
+    }
+
+    @PostMapping("/alerts/{id}/resolve")
+    public PreventionAlert resolve(
+            @PathVariable String id,
+            @RequestBody(required = false) Map<String, Object> data,
+            @RequestHeader(value = "X-Demo-User-Email", required = false) String userEmail
+    ) {
+        AppUser admin = authorizationService.requireAdmin(userEmail);
+        return lossSentinelService.resolve(id, admin.getEmail(), data);
+    }
+
+    @GetMapping("/alerts/{id}/source-reports")
+    public List<LostReport> sourceReports(
+            @PathVariable String id,
+            @RequestHeader(value = "X-Demo-User-Email", required = false) String userEmail
+    ) {
+        authorizationService.requireAdmin(userEmail);
+        return lossSentinelService.sourceReports(id);
+    }
+
+    @PostMapping("/alerts/{id}/mission")
+    public RecoveryMission createMission(
+            @PathVariable String id,
+            @RequestHeader(value = "X-Demo-User-Email", required = false) String userEmail
+    ) {
+        AppUser admin = authorizationService.requireAdmin(userEmail);
+        return lossSentinelService.createMissionFromAlert(id, admin.getEmail());
     }
 }

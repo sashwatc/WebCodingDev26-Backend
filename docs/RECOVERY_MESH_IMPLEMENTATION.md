@@ -50,7 +50,7 @@
 - [x] Phase 4: Event Recovery Mode, QR zones, public display feed.
 - [x] Phase 5: Asset Rescue Bridge.
 - [x] Phase 6: Return Pass and Pickup Station.
-- [x] Phase 7: Loss Sentinel.
+- [x] Phase 7: Pattern Review powered by Loss Sentinel.
 - [x] Phase 8: Privacy-Preserving Partner Relay.
 - [x] Phase 9: NLC documentation and sources.
 - [x] Phase 10: Presentation-ready seed scenario.

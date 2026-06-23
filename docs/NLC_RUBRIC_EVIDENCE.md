@@ -16,7 +16,7 @@
 
 - Spring Boot controllers/services/repositories for recovery cases, missions, proof vault, custody ledger, event hubs, assets, return passes, sentinel alerts, recovery nodes, and partner relays.
 - Mongo indexes include unique recovery case per lost report and unique custody sequence per found item.
-- Deterministic Recovery Planning and Loss Sentinel services avoid fake AI precision.
+- Deterministic Recovery Planning and Pattern Review powered by Loss Sentinel avoid fake AI precision.
 - Public DTOs redact private fields; admin endpoints use persisted demo user roles.
 - Tamper-Evident Custody Ledger verifies SHA-256 event chains.
 - React/TanStack Query integration is centralized through `src/api/appClient.js`.
@@ -40,4 +40,4 @@
 
 ## Presentation Proof
 
-The seeded demo path includes event beacon reporting, likely recovery zones, admin missions, proof vault review, custody verification, active return pass, pickup redemption, returned status, Loss Sentinel, and redacted Partner Relay.
+The demo path includes event beacon reporting, likely recovery zones, admin missions, proof vault review, custody verification, active return pass, pickup redemption, returned status, Pattern Review with source Lost Reports, and redacted Partner Relay.

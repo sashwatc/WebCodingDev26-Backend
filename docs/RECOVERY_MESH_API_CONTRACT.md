@@ -16,13 +16,20 @@ All responses use snake_case JSON. Admin routes require `X-Demo-User-Email` for 
 
 ## Recovery Cases
 
-- `GET /api/recovery-cases`
-- `GET /api/recovery-cases/{id}`
-- `GET /api/recovery-cases/lost-reports/{lostReportId}`
-- `POST /api/recovery-cases/lost-reports/{lostReportId}/refresh`
-- `PATCH /api/recovery-cases/{id}`
-- `GET /api/recovery-cases/{id}/missions`
-- `PATCH /api/recovery-missions/{id}`
+- `GET /api/admin/recovery-center` admin only. Returns server-calculated summary counts and case rows with linked Lost Reports, next actions, missions, and updates.
+- `GET /api/recovery-cases` admin only.
+- `GET /api/recovery-cases/{id}` admin only.
+- `GET /api/recovery-cases/lost-reports/{lostReportId}` admin only.
+- `POST /api/admin/recovery-cases` admin only. Creates a Lost Report first, then creates the linked Recovery Case.
+- `POST /api/admin/recovery-cases/lost-reports/{lostReportId}` admin only. Creates or confirms a Recovery Case for an existing Lost Report.
+- `POST /api/recovery-cases/lost-reports/{lostReportId}/refresh` admin only.
+- `PATCH /api/recovery-cases/{id}` admin only.
+- `POST /api/recovery-cases/{id}/assign` admin only.
+- `GET /api/recovery-cases/{id}/missions` admin only.
+- `POST /api/recovery-cases/{id}/missions` admin only.
+- `PATCH /api/recovery-missions/{id}` admin only.
+
+Recovery Cases must reference real Lost Reports. Lost Report creation never creates Found Items.
 
 ## Proof Vault
 
@@ -58,11 +65,27 @@ All responses use snake_case JSON. Admin routes require `X-Demo-User-Email` for 
 - `POST /api/return-passes/verify`
 - `POST /api/return-passes/{id}/redeem` admin only.
 
-## Loss Sentinel
+## Pattern Review Powered By Loss Sentinel
 
 - `GET /api/sentinel/alerts` admin only.
-- `POST /api/sentinel/recompute` admin only.
+- `POST /api/sentinel/recompute` admin only. Analyzes actual Lost Reports only. Returns `state: "not_enough_data"` without saving an alert unless the same zone/category has at least 3 recent reports, at least 2 baseline reports, and recent volume at least 2x the normalized baseline.
 - `PATCH /api/sentinel/alerts/{id}` admin only.
+- `POST /api/sentinel/alerts/{id}/acknowledge` admin only.
+- `POST /api/sentinel/alerts/{id}/dismiss` admin only.
+- `POST /api/sentinel/alerts/{id}/resolve` admin only.
+- `GET /api/sentinel/alerts/{id}/source-reports` admin only.
+- `POST /api/sentinel/alerts/{id}/mission` admin only. Creates a real Recovery Mission from an alert source Lost Report.
+
+Alerts store source Lost Report IDs, observed count, baseline count, recent/baseline date windows, reasons, suggested actions, and calculation timestamp.
+
+## Admin Demo Scenarios
+
+- `POST /api/admin/demo-scenarios/airpods_gym` admin only.
+- `POST /api/admin/demo-scenarios/gym_electronics_pattern` admin only.
+- `POST /api/admin/demo-scenarios/library_water_bottle` admin only.
+- `POST /api/admin/demo-scenarios/custom` admin only.
+
+Scenario records are normal Mongo records with `is_demo: true`; scenarios never delete non-demo user data.
 
 ## Partner Relay
 

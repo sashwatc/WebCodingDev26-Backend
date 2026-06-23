@@ -94,9 +94,24 @@ PICKUP_HOURS=School days, 8:00 AM-3:30 PM
 - `GET /api/admin/claims`
 - `GET /api/admin/audit-logs`
 - `GET /api/admin/notifications`
+- `GET /api/admin/recovery-center`
 - `POST /api/admin/claims/{id}/approve`
 - `POST /api/admin/claims/{id}/deny`
 - `POST /api/admin/items/{id}/archive`
+- `POST /api/admin/recovery-cases`
+- `POST /api/admin/recovery-cases/lost-reports/{lostReportId}`
+- `POST /api/recovery-cases/lost-reports/{lostReportId}/refresh`
+- `POST /api/recovery-cases/{id}/assign`
+- `POST /api/recovery-cases/{id}/missions`
+- `PATCH /api/recovery-missions/{id}`
+- `GET /api/sentinel/alerts`
+- `POST /api/sentinel/recompute`
+- `POST /api/sentinel/alerts/{id}/acknowledge`
+- `POST /api/sentinel/alerts/{id}/dismiss`
+- `POST /api/sentinel/alerts/{id}/resolve`
+- `GET /api/sentinel/alerts/{id}/source-reports`
+- `POST /api/sentinel/alerts/{id}/mission`
+- `POST /api/admin/demo-scenarios/{airpods_gym|gym_electronics_pattern|library_water_bottle|custom}`
 - `GET /api/entities/{entityName}`
 - `POST /api/entities/{entityName}`
 - `PATCH /api/entities/{entityName}/{id}`
@@ -138,6 +153,12 @@ Item statuses used by the upgraded workflow:
 
 Claims are stored separately in the `claims` collection. Students submit an identifying detail, and admins approve or deny it from `/admin`.
 
+## Recovery Center And Pattern Review
+
+Recovery Cases always link to real Lost Reports. Admins can create a case from an existing Lost Report or create a Lost Report first through the Recovery Center. Lost Reports never create Found Items; Found Items remain real inventory.
+
+Pattern Review powered by Loss Sentinel analyzes actual Lost Reports only. Recompute returns `not_enough_data` unless there are at least 3 recent Lost Reports, at least 2 baseline Lost Reports, and a 2x normalized baseline increase. Alerts store source Lost Report IDs, date windows, counts, reasons, suggested actions, and calculation time.
+
 ## Security And Validation
 
 - Recursive backend sanitization strips HTML/script tags from submitted text.
@@ -160,6 +181,14 @@ Examples included:
 - Approved calculator claim
 - Admin user: `avery.patel@pleasantvalley.edu`
 
+Admin demo scenario buttons can add:
+
+- AirPods at Gym: Lost Report, Recovery Case, gym missions, Found Item, and pending Claim
+- Gym Electronics Pattern: enough realistic Lost Reports for a valid Pattern Review alert
+- Library Water Bottle: low-priority Recovery Case and mission
+
+Scenario-created records are normal Mongo records flagged with `is_demo=true`. The scenario system never wipes non-demo user data.
+
 ## Judge Demo Flow
 
 1. Open `http://localhost:8080`.
@@ -167,9 +196,10 @@ Examples included:
 3. Show the `Possible Matches` result and explain the scoring reasons.
 4. Click `Claim This Item` and submit a secret ownership detail.
 5. Open `Admin Dashboard` and sign in as `Avery Patel` with `avery.patel@pleasantvalley.edu`.
-6. Approve the pending claim.
-7. Show the item status change, the Notifications tab email preview, and the audit log entry.
-8. Archive a resolved item from the admin found-items tab.
+6. Open `Demo Scenarios`, create `AirPods at Gym`, then open `Recovery Center` and show the linked Lost Report, missions, next action, and pending claim.
+7. Approve the pending claim and show the item status change, the Notifications tab email preview, and the audit log entry.
+8. Create `Gym Electronics Pattern`, open `Pattern Review`, recompute, show source Lost Report IDs, then create a Recovery Mission from the alert.
+9. Archive a resolved item from the admin found-items tab.
 
 ## Deployment
 
@@ -188,4 +218,4 @@ Set production environment variables in the host platform instead of committing 
 ./mvnw test
 ```
 
-Current verification: 35 tests passing.
+Current verification: 40 tests passing.

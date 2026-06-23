@@ -12,7 +12,6 @@ import com.FBLA.WebCodingDev26Backend.model.LostReport;
 import com.FBLA.WebCodingDev26Backend.model.MatchSuggestion;
 import com.FBLA.WebCodingDev26Backend.model.Notification;
 import com.FBLA.WebCodingDev26Backend.model.PartnerRelay;
-import com.FBLA.WebCodingDev26Backend.model.PreventionAlert;
 import com.FBLA.WebCodingDev26Backend.model.RecoveryCase;
 import com.FBLA.WebCodingDev26Backend.model.RecoveryMission;
 import com.FBLA.WebCodingDev26Backend.model.RecoveryNode;
@@ -137,7 +136,6 @@ public class SeedDataConfig {
                 seedClaims(claims);
                 seedRecovery(recoveryCases, recoveryMissions);
                 seedPasses(returnPasses);
-                seedSentinel(preventionAlerts);
                 seedRelay(recoveryNodes, partnerRelays);
                 seedCustody(custodyLedgerService);
 
@@ -315,6 +313,7 @@ public class SeedDataConfig {
         recoveryCase.setLikelyZoneSummaries(List.of("Gym Bleachers - 86%", "Gym Entrance - 61%", "Athletics Office - 35%"));
         recoveryCase.setCreatedDate(NOW);
         recoveryCase.setUpdatedDate(NOW);
+        recoveryCase.setIsDemo(true);
         recoveryCases.save(recoveryCase);
 
         recoveryMissions.save(mission("mission_bleachers", "case_airpods_game", "zone_gym_bleachers", "Gym Bleachers", 86, "high", "open"));
@@ -331,29 +330,6 @@ public class SeedDataConfig {
         redeemed.setRedeemedAt("2026-03-14T16:30:00Z");
         redeemed.setRedeemedBy("avery.patel@pleasantvalley.edu");
         returnPasses.save(redeemed);
-    }
-
-    private void seedSentinel(PreventionAlertRepository preventionAlerts) {
-        if (preventionAlerts == null) {
-            return;
-        }
-        PreventionAlert alert = new PreventionAlert();
-        alert.setId("alert_gym_electronics");
-        alert.setTenantId("pvhs");
-        alert.setTitle("Unusual increase detected");
-        alert.setAlertType("volume_spike");
-        alert.setSeverity("high");
-        alert.setCampusZoneId("zone_gym_bleachers");
-        alert.setCategory("electronics");
-        alert.setTimeWindowStart("2026-03-14T18:00:00Z");
-        alert.setTimeWindowEnd("2026-03-14T21:00:00Z");
-        alert.setBaselineCount(2);
-        alert.setObservedCount(6);
-        alert.setReasons(List.of("6 electronics reports near the gym within 90 minutes after Friday practice.", "Observed volume is at least 2x the recent baseline."));
-        alert.setSuggestedActions(List.of("Check bleachers and benches", "Create recovery mission", "Post reminder at gym exit"));
-        alert.setStatus("open");
-        alert.setCreatedDate(NOW);
-        preventionAlerts.save(alert);
     }
 
     private void seedRelay(RecoveryNodeRepository recoveryNodes, PartnerRelayRepository partnerRelays) {
@@ -412,6 +388,7 @@ public class SeedDataConfig {
         item.setRestrictedVisibility(false);
         item.setCreatedDate(NOW);
         item.setUpdatedDate(NOW);
+        item.setIsDemo(true);
         return item;
     }
 
@@ -431,6 +408,7 @@ public class SeedDataConfig {
         report.setUrgency("medium");
         report.setCreatedDate(NOW);
         report.setUpdatedDate(NOW);
+        report.setIsDemo(true);
         return report;
     }
 
@@ -460,6 +438,7 @@ public class SeedDataConfig {
         claim.setRiskFlags(List.of("demo record"));
         claim.setCreatedDate(NOW);
         claim.setUpdatedDate(NOW);
+        claim.setIsDemo(true);
         return claim;
     }
 
@@ -495,6 +474,7 @@ public class SeedDataConfig {
         mission.setStatus(status);
         mission.setCreatedDate(NOW);
         mission.setUpdatedDate(NOW);
+        mission.setIsDemo(true);
         return mission;
     }
 

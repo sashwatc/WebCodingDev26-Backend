@@ -43,6 +43,7 @@ public class FoundItem {
     private String eventHubId;
     private String campusZoneId;
     private String linkedLostReportId;
+    private Boolean isDemo;
 
     private List<String> photoUrls = new ArrayList<>();
 
@@ -120,6 +121,8 @@ public class FoundItem {
     public void setCampusZoneId(String campusZoneId) { this.campusZoneId = campusZoneId; }
     public String getLinkedLostReportId() { return linkedLostReportId; }
     public void setLinkedLostReportId(String linkedLostReportId) { this.linkedLostReportId = linkedLostReportId; }
+    public Boolean getIsDemo() { return isDemo; }
+    public void setIsDemo(Boolean isDemo) { this.isDemo = isDemo; }
     public List<String> getPhotoUrls() { return photoUrls; }
     public void setPhotoUrls(List<String> photoUrls) { this.photoUrls = photoUrls == null ? new ArrayList<>() : photoUrls; }
     public List<String> getTags() { return tags; }

@@ -30,6 +30,7 @@ public class LostReport {
     private String studentId;
     private String eventHubId;
     private String campusZoneId;
+    private Boolean isDemo;
 
     private List<String> photoUrls = new ArrayList<>();
 
@@ -79,6 +80,8 @@ public class LostReport {
     public void setEventHubId(String eventHubId) { this.eventHubId = eventHubId; }
     public String getCampusZoneId() { return campusZoneId; }
     public void setCampusZoneId(String campusZoneId) { this.campusZoneId = campusZoneId; }
+    public Boolean getIsDemo() { return isDemo; }
+    public void setIsDemo(Boolean isDemo) { this.isDemo = isDemo; }
     public List<String> getPhotoUrls() { return photoUrls; }
     public void setPhotoUrls(List<String> photoUrls) { this.photoUrls = photoUrls == null ? new ArrayList<>() : photoUrls; }
     public String getPhotoUrl() { return photoUrls == null || photoUrls.isEmpty() ? "" : photoUrls.get(0); }

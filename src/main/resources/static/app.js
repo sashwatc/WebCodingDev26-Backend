@@ -13,7 +13,8 @@ const routes = {
 };
 
 const state = {
-  adminTab: "claims"
+  adminTab: "claims",
+  adminNotice: ""
 };
 
 function escapeHtml(value) {
@@ -608,8 +609,16 @@ async function submitAdminLogin(event) {
 async function loadAdminDashboard() {
   const target = document.querySelector("#admin-dashboard");
   try {
-    const dashboard = await api("/api/admin/dashboard", { headers: adminHeaders() });
-    target.innerHTML = AdminDashboard(dashboard);
+    const [dashboard, recoveryCenter, patternAlerts] = await Promise.all([
+      api("/api/admin/dashboard", { headers: adminHeaders() }),
+      api("/api/admin/recovery-center", { headers: adminHeaders() }),
+      api("/api/sentinel/alerts", { headers: adminHeaders() })
+    ]);
+    target.innerHTML = AdminDashboard({
+      ...dashboard,
+      recovery_center: recoveryCenter,
+      pattern_alerts: patternAlerts
+    });
     bindAdminActions();
   } catch (error) {
     target.innerHTML = `<div class="error">${escapeHtml(error.message)}</div>`;
@@ -623,20 +632,26 @@ function AdminDashboard(dashboard) {
   const pendingClaims = dashboard.pending_claims || [];
   const notifications = dashboard.notifications || [];
   const auditLogs = dashboard.audit_logs || [];
+  const recoveryCenter = dashboard.recovery_center || { summary: {}, cases: [] };
+  const patternAlerts = dashboard.pattern_alerts || [];
   const tabs = [
     ["claims", `Pending Claims (${pendingClaims.length})`],
+    ["recovery", `Recovery Center (${field(recoveryCenter.summary || {}, "active_cases", "activeCases") || 0})`],
+    ["pattern", `Pattern Review (${patternAlerts.length})`],
     ["items", `Found Items (${foundItems.length})`],
     ["lost", `Lost Reports (${lostReports.length})`],
+    ["scenarios", "Demo Scenarios"],
     ["notifications", `Notifications (${notifications.length})`],
     ["audit", `Audit Log (${auditLogs.length})`]
   ];
-  const data = { foundItems, lostReports, claims, pendingClaims, notifications, auditLogs };
+  const data = { foundItems, lostReports, claims, pendingClaims, notifications, auditLogs, recoveryCenter, patternAlerts };
   return `
+    ${state.adminNotice ? `<div class="success">${escapeHtml(state.adminNotice)}</div>` : ""}
     <section class="metric-row">
       ${metric(foundItems.length, "Found items")}
       ${metric(lostReports.length, "Lost reports")}
       ${metric(pendingClaims.length, "Pending claims")}
-      ${metric(notifications.length, "Notifications")}
+      ${metric(field(recoveryCenter.summary || {}, "open_missions", "openMissions") || 0, "Open missions")}
     </section>
     <div class="admin-tabs" role="tablist" aria-label="Admin views">
       ${tabs.map(([tab, label]) => `<button class="${state.adminTab === tab ? "active" : ""}" data-admin-tab="${tab}" type="button">${escapeHtml(label)}</button>`).join("")}
@@ -648,6 +663,62 @@ function AdminDashboard(dashboard) {
 }
 
 function AdminTabContent(data) {
+  if (state.adminTab === "recovery") {
+    const summary = data.recoveryCenter.summary || {};
+    const cases = data.recoveryCenter.cases || [];
+    return `
+      <section class="admin-tools" aria-label="Recovery Center summary">
+        ${metric(field(summary, "active_cases", "activeCases") || 0, "Active cases")}
+        ${metric(field(summary, "open_missions", "openMissions") || 0, "Open missions")}
+        ${metric(field(summary, "claims_awaiting_review", "claimsAwaitingReview") || 0, "Claims awaiting review")}
+        ${metric(field(summary, "pickup_ready_cases", "pickupReadyCases") || 0, "Pickup-ready cases")}
+      </section>
+      ${AdminTable({
+        rows: cases,
+        empty: "No recovery cases yet. Create a demo scenario or submit a Lost Report.",
+        columns: [
+          { label: "Case", render: (item) => `<strong>${escapeHtml(field(item.recovery_case, "case_code", "caseCode") || field(item.recovery_case, "id"))}</strong><br><span class="hint">${escapeHtml(field(item.recovery_case, "id"))}</span>` },
+          { label: "Lost Report", render: (item) => `<strong>${escapeHtml(field(item.lost_report, "title") || "Missing linked report")}</strong><br><span class="hint">${escapeHtml(field(item.lost_report, "id") || field(item.recovery_case, "lost_report_id", "lostReportId"))}</span>` },
+          { label: "Status", render: (item) => StatusBadge(field(item.recovery_case, "status")) },
+          { label: "Next Action", render: (item) => escapeHtml(field(item, "next_action", "nextAction")) },
+          { label: "Missions", render: (item) => escapeHtml((field(item, "missions") || []).length) },
+          { label: "Controls", render: (item) => `
+            <div class="actions table-actions">
+              <button class="secondary" data-refresh-case="${escapeHtml(field(item.recovery_case, "lost_report_id", "lostReportId"))}" type="button">Refresh</button>
+              <button class="secondary" data-assign-case="${escapeHtml(field(item.recovery_case, "id"))}" type="button">Assign</button>
+              <button class="secondary" data-create-mission="${escapeHtml(field(item.recovery_case, "id"))}" type="button">Mission</button>
+            </div>
+          ` }
+        ]
+      })}
+    `;
+  }
+  if (state.adminTab === "pattern") {
+    return `
+      <section class="admin-toolbar">
+        <button data-recompute-pattern type="button">Recompute Pattern Review</button>
+      </section>
+      ${AdminTable({
+        rows: data.patternAlerts,
+        empty: "No Pattern Review alerts yet. Run the Gym Electronics Pattern demo scenario, then recompute.",
+        columns: [
+          { label: "Alert", render: (alert) => `<strong>${escapeHtml(alert.title || "Pattern Review")}</strong><br><span class="hint">${escapeHtml(alert.id)}</span>` },
+          { label: "Pattern", render: (alert) => `${escapeHtml(alert.category)}<br><span class="hint">${escapeHtml(alert.campus_zone_id || alert.campusZoneId || "unknown zone")}</span>` },
+          { label: "Counts", render: (alert) => `${escapeHtml(alert.observed_count || alert.observedCount || 0)} recent / ${escapeHtml(alert.baseline_count || alert.baselineCount || 0)} baseline` },
+          { label: "Sources", render: (alert) => escapeHtml((alert.source_lost_report_ids || alert.sourceLostReportIds || []).join(", ")) },
+          { label: "Status", render: (alert) => StatusBadge(alert.status) },
+          { label: "Actions", render: (alert) => `
+            <div class="actions table-actions">
+              <button class="secondary" data-alert-ack="${escapeHtml(alert.id)}" type="button">Ack</button>
+              <button class="secondary" data-alert-mission="${escapeHtml(alert.id)}" type="button">Mission</button>
+              <button class="secondary" data-alert-resolve="${escapeHtml(alert.id)}" type="button">Resolve</button>
+              <button class="danger" data-alert-dismiss="${escapeHtml(alert.id)}" type="button">Dismiss</button>
+            </div>
+          ` }
+        ]
+      })}
+    `;
+  }
   if (state.adminTab === "items") {
     return AdminTable({
       rows: data.foundItems,
@@ -697,6 +768,27 @@ function AdminTabContent(data) {
       ]
     });
   }
+  if (state.adminTab === "scenarios") {
+    return `
+      <section class="scenario-grid" aria-label="Demo scenarios">
+        ${ScenarioButton("airpods_gym", "AirPods at Gym", "Creates a Lost Report, Recovery Case, gym missions, Found Item, and pending Claim.")}
+        ${ScenarioButton("gym_electronics_pattern", "Gym Electronics Pattern", "Creates enough real Lost Reports for a valid Pattern Review alert.")}
+        ${ScenarioButton("library_water_bottle", "Library Water Bottle", "Creates a low-priority Lost Report, Recovery Case, and mission.")}
+      </section>
+      <form id="custom-scenario-form" class="panel scenario-form" novalidate>
+        <h3>Custom Scenario</h3>
+        <div class="form-grid">
+          ${input("title", "Lost item title", "Lost debate folder", true)}
+          ${select("category", "Category", ["electronics", "bags_cases", "school_supplies", "clothing", "personal_items", "food_containers"])}
+          ${input("location_lost", "Location", "Main Office", true)}
+          ${input("contact_email", "Contact email", "demo.student@pleasantvalley.edu", true, "email")}
+        </div>
+        <div class="actions">
+          <button data-custom-scenario type="submit">Create Custom Scenario</button>
+        </div>
+      </form>
+    `;
+  }
   return AdminTable({
     rows: data.pendingClaims,
     empty: "No pending claims need review.",
@@ -715,6 +807,16 @@ function AdminTabContent(data) {
   });
 }
 
+function ScenarioButton(id, title, description) {
+  return `
+    <article class="scenario-card">
+      <h3>${escapeHtml(title)}</h3>
+      <p>${escapeHtml(description)}</p>
+      <button data-demo-scenario="${escapeHtml(id)}" type="button">Create</button>
+    </article>
+  `;
+}
+
 function bindAdminActions() {
   document.querySelectorAll("[data-admin-tab]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -731,16 +833,63 @@ function bindAdminActions() {
   document.querySelectorAll("[data-archive-item]").forEach((button) => {
     button.addEventListener("click", () => adminDecision(`/api/admin/items/${button.dataset.archiveItem}/archive`, "Item archived."));
   });
+  document.querySelectorAll("[data-refresh-case]").forEach((button) => {
+    button.addEventListener("click", () => adminDecision(`/api/recovery-cases/lost-reports/${button.dataset.refreshCase}/refresh`, "Recovery plan refreshed."));
+  });
+  document.querySelectorAll("[data-assign-case]").forEach((button) => {
+    button.addEventListener("click", () => adminDecision(`/api/recovery-cases/${button.dataset.assignCase}/assign`, "Recovery case assigned.", {
+      assigned_to: getAdminUser()?.email || ""
+    }));
+  });
+  document.querySelectorAll("[data-create-mission]").forEach((button) => {
+    button.addEventListener("click", () => adminDecision(`/api/recovery-cases/${button.dataset.createMission}/missions`, "Recovery mission created.", {
+      title: "Admin follow-up mission",
+      recommended_action: "Check the next likely location and update the mission status.",
+      priority: "medium",
+      status: "open"
+    }));
+  });
+  document.querySelectorAll("[data-demo-scenario]").forEach((button) => {
+    button.addEventListener("click", () => adminDecision(`/api/admin/demo-scenarios/${button.dataset.demoScenario}`, "Demo scenario created."));
+  });
+  document.querySelectorAll("[data-alert-ack]").forEach((button) => {
+    button.addEventListener("click", () => adminDecision(`/api/sentinel/alerts/${button.dataset.alertAck}/acknowledge`, "Pattern Review alert acknowledged."));
+  });
+  document.querySelectorAll("[data-alert-mission]").forEach((button) => {
+    button.addEventListener("click", () => adminDecision(`/api/sentinel/alerts/${button.dataset.alertMission}/mission`, "Pattern Review mission created."));
+  });
+  document.querySelectorAll("[data-alert-resolve]").forEach((button) => {
+    button.addEventListener("click", () => adminDecision(`/api/sentinel/alerts/${button.dataset.alertResolve}/resolve`, "Pattern Review alert resolved.", {
+      resolution_notes: "Resolved during demo review."
+    }));
+  });
+  document.querySelectorAll("[data-alert-dismiss]").forEach((button) => {
+    button.addEventListener("click", () => adminDecision(`/api/sentinel/alerts/${button.dataset.alertDismiss}/dismiss`, "Pattern Review alert dismissed.", {
+      resolution_notes: "Dismissed after admin review."
+    }));
+  });
+  const recompute = document.querySelector("[data-recompute-pattern]");
+  if (recompute) {
+    recompute.addEventListener("click", () => adminDecision("/api/sentinel/recompute", "Pattern Review recomputed."));
+  }
+  const customScenario = document.querySelector("#custom-scenario-form");
+  if (customScenario) {
+    customScenario.addEventListener("submit", (event) => {
+      event.preventDefault();
+      adminDecision("/api/admin/demo-scenarios/custom", "Custom demo scenario created.", formPayload(event.currentTarget));
+    });
+  }
 }
 
-async function adminDecision(path, message) {
+async function adminDecision(path, message, body = {}) {
   const target = document.querySelector("#admin-dashboard");
   try {
-    await api(path, {
+    const payload = await api(path, {
       method: "POST",
       headers: adminHeaders(),
-      body: JSON.stringify({ admin_notes: message })
+      body: JSON.stringify({ admin_notes: message, ...body })
     });
+    state.adminNotice = payload?.message ? `${message} ${payload.message}` : message;
     await loadAdminDashboard();
   } catch (error) {
     target.insertAdjacentHTML("afterbegin", `<div class="error">${escapeHtml(error.message)}</div>`);

@@ -545,6 +545,59 @@ tr:last-child td {
   border-color: var(--primary-strong);
 }
 
+.admin-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin: 1rem 0;
+}
+
+.admin-tools {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.8rem;
+  margin: 1rem 0;
+}
+
+.table-actions {
+  align-items: flex-start;
+  margin-top: 0;
+}
+
+.table-actions button {
+  min-height: 34px;
+  padding: 0.45rem 0.58rem;
+  font-size: 0.84rem;
+}
+
+.scenario-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 0.8rem;
+  margin: 1rem 0;
+}
+
+.scenario-card {
+  display: grid;
+  gap: 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 1rem;
+}
+
+.scenario-card h3,
+.scenario-card p {
+  margin: 0;
+}
+
+.scenario-card p {
+  color: var(--muted);
+}
+
+.scenario-form {
+  margin-top: 1rem;
+}
+
 .metric-row {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -612,6 +665,10 @@ tr:last-child td {
   .metric-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .admin-tools {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 620px) {
@@ -629,7 +686,8 @@ tr:last-child td {
   }
 
   .form-grid,
-  .metric-row {
+  .metric-row,
+  .admin-tools {
     grid-template-columns: 1fr;
   }
 
