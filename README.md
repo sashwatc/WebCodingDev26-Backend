@@ -5,11 +5,12 @@ School lost-and-found recovery platform built for FBLA Website Coding & Developm
 ## Architecture Inspected
 
 - Frontend: this checkout did not include the referenced sibling Vite/React app, so the upgraded demo UI is a focused static HTML/CSS/JavaScript app served from Spring Boot `src/main/resources/static`.
-- Routing: browser routes use the History API, with Spring MVC forwarding `/`, `/report-lost`, `/report-found`, `/browse`, `/claim`, `/admin`, and `/sources` to `index.html`.
+- Browser auth: Appwrite Web SDK handles email/password signup and login, Google OAuth, current-session lookup, email verification, verification resend, and logout.
+- Routing: browser routes use the History API, with Spring MVC forwarding app and auth routes such as `/login`, `/signup`, `/verify-email`, and `/auth/callback` to `index.html`.
 - Backend: Java 21, Spring Boot 4.1, Spring Web MVC, Bean Validation, Spring Data MongoDB.
 - Database: MongoDB Atlas or local MongoDB through `MONGO_URI` and `MONGO_DATABASE`.
 - Core models: `FoundItem`, `LostReport`, `Claim`, `AppUser`, `Notification`, `AuditLog`, `MatchSuggestion`.
-- Auth: demo-safe role access. `ADMIN_EMAIL` becomes the admin account when signing in through `/api/auth/signin`.
+- Auth: Appwrite protects browser routes. `ADMIN_EMAIL` still becomes the backend admin account when the signed-in Appwrite email syncs through `/api/auth/signin`.
 
 ## Local Setup
 
@@ -17,7 +18,7 @@ School lost-and-found recovery platform built for FBLA Website Coding & Developm
 cp .env.example .env
 ```
 
-Fill in `MONGO_URI`, `MONGO_DATABASE`, and `ADMIN_EMAIL`. For a local MongoDB profile:
+Fill in `MONGO_URI`, `MONGO_DATABASE`, `ADMIN_EMAIL`, `VITE_APPWRITE_ENDPOINT`, and `VITE_APPWRITE_PROJECT_ID`. For a local MongoDB profile:
 
 ```bash
 SPRING_PROFILES_ACTIVE=local ./mvnw spring-boot:run
@@ -54,6 +55,8 @@ MONGO_DATABASE=lostthenfound
 PORT=8080
 FRONTEND_URL=http://localhost:8080
 ADMIN_EMAIL=avery.patel@pleasantvalley.edu
+VITE_APPWRITE_ENDPOINT=https://cloud.appwrite.io/v1
+VITE_APPWRITE_PROJECT_ID=fill_this_in
 SEED_DATA_ENABLED=true
 AI_MATCHMAKING_ENABLED=true
 AI_API_KEY=
@@ -71,6 +74,13 @@ PICKUP_HOURS=School days, 8:00 AM-3:30 PM
 
 `EMAIL_DEMO_MODE=true` logs safe email previews and saves notifications without requiring SMTP, SendGrid, or a paid service.
 
+Appwrite setup:
+
+- Add your deployed site URL and local URL, such as `http://localhost:8080`, as Web platforms in the Appwrite project.
+- Enable Email/Password auth and the Google OAuth provider in Appwrite Auth settings.
+- In Google OAuth settings, use the redirect URL Appwrite shows in its provider setup modal.
+- Appwrite verification emails redirect back to `/verify-email`, where the app reads `userId` and `secret`.
+
 ## Web Routes
 
 - `/` - Home and judge-ready workflow overview
@@ -79,6 +89,10 @@ PICKUP_HOURS=School days, 8:00 AM-3:30 PM
 - `/browse` - Public-safe found item cards
 - `/claim` - Claim form with secret ownership detail
 - `/admin` - Admin dashboard for claims, reports, items, archive actions, and audit log
+- `/login` - Appwrite email/password and Google sign-in
+- `/signup` - Appwrite email/password signup with immediate session and verification email
+- `/verify-email` - Appwrite email verification callback
+- `/auth/callback` - Google OAuth success callback
 - `/sources` - Sources and license notes
 
 ## API Routes

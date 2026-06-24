@@ -12,6 +12,10 @@ public class WebRouteController {
             "/browse",
             "/claim",
             "/admin",
+            "/login",
+            "/signup",
+            "/verify-email",
+            "/auth/callback",
             "/sources"
     })
     public String app() {

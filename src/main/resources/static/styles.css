@@ -142,6 +142,23 @@ a:hover {
   color: var(--primary-strong);
 }
 
+.nav-user {
+  max-width: 210px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 650;
+  padding: 0.55rem 0.35rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-button {
+  min-height: 40px;
+  padding: 0.55rem 0.72rem;
+  font-size: 0.94rem;
+}
+
 .shell main {
   max-width: var(--max);
   min-height: calc(100vh - 180px);
@@ -493,6 +510,57 @@ textarea::placeholder {
   color: var(--ink);
 }
 
+.verify-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem;
+  border: 1px solid oklch(0.82 0.08 78);
+  border-radius: var(--radius);
+  background: oklch(0.95 0.055 82);
+  color: oklch(0.31 0.075 72);
+  padding: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.verify-banner div {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.verify-banner strong {
+  color: oklch(0.27 0.075 72);
+}
+
+.auth-head {
+  max-width: 760px;
+}
+
+.auth-panel {
+  display: grid;
+  max-width: 760px;
+  gap: 1rem;
+}
+
+.auth-panel h2,
+.auth-panel p {
+  margin: 0;
+}
+
+.auth-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.auth-switch {
+  color: var(--muted);
+}
+
+.loading-panel {
+  color: var(--muted);
+  font-weight: 650;
+}
+
 .table-wrap {
   overflow-x: auto;
   border: 1px solid var(--line);
@@ -700,6 +768,19 @@ tr:last-child td {
   .button,
   button {
     width: 100%;
+  }
+
+  .nav-links .nav-button {
+    width: auto;
+  }
+
+  .nav-user {
+    max-width: 100%;
+  }
+
+  .verify-banner {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .nav-link {

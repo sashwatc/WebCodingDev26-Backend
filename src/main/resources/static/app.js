@@ -1,3 +1,16 @@
+import {
+  confirmEmailVerification,
+  friendlyAuthError,
+  getCurrentUser,
+  hasAppwriteConfig,
+  isEmailVerified,
+  loginWithEmail,
+  logoutCurrentSession,
+  resendVerificationEmail,
+  signInWithGoogle,
+  signUpWithEmail
+} from "./lib/appwrite.js";
+
 const app = document.querySelector("#app");
 const header = document.querySelector("#site-header");
 const footer = document.querySelector("#site-footer");
@@ -9,12 +22,21 @@ const routes = {
   "/browse": BrowsePage,
   "/claim": ClaimPage,
   "/admin": AdminPage,
+  "/login": LoginPage,
+  "/signup": SignupPage,
+  "/verify-email": VerifyEmailPage,
+  "/auth/callback": AuthCallbackPage,
   "/sources": SourcesPage
 };
 
 const state = {
   adminTab: "claims",
-  adminNotice: ""
+  adminNotice: "",
+  authLoading: true,
+  authUser: null,
+  backendUser: null,
+  authNotice: "",
+  authError: ""
 };
 
 function escapeHtml(value) {
@@ -35,18 +57,6 @@ function field(object, ...keys) {
   return "";
 }
 
-function getAdminUser() {
-  try {
-    return JSON.parse(localStorage.getItem("ltf_admin_user") || "null");
-  } catch {
-    return null;
-  }
-}
-
-function setAdminUser(user) {
-  localStorage.setItem("ltf_admin_user", JSON.stringify(user));
-}
-
 async function api(path, options = {}) {
   const headers = {
     "Accept": "application/json",
@@ -64,13 +74,383 @@ async function api(path, options = {}) {
 }
 
 function adminHeaders() {
-  const user = getAdminUser();
+  const user = state.authUser;
   return user?.email ? { "X-Demo-User-Email": user.email } : {};
 }
 
 function navigate(path) {
   window.history.pushState({}, "", path);
   render();
+}
+
+function currentPathWithSearch() {
+  return `${window.location.pathname}${window.location.search}`;
+}
+
+function authNextParam() {
+  return encodeURIComponent(currentPathWithSearch());
+}
+
+function authUserName(user = state.authUser) {
+  return user?.name || user?.email || "signed-in user";
+}
+
+async function loadAuthUser() {
+  state.authLoading = true;
+  state.authError = "";
+
+  if (!hasAppwriteConfig()) {
+    state.authUser = null;
+    state.backendUser = null;
+    state.authLoading = false;
+    return;
+  }
+
+  try {
+    state.authUser = await getCurrentUser();
+    await syncBackendUser();
+  } catch {
+    state.authUser = null;
+    state.backendUser = null;
+  } finally {
+    state.authLoading = false;
+  }
+}
+
+async function syncBackendUser() {
+  if (!state.authUser?.email) {
+    return;
+  }
+
+  try {
+    state.backendUser = await api("/api/auth/signin", {
+      method: "POST",
+      body: JSON.stringify({
+        full_name: authUserName(),
+        email: state.authUser.email
+      })
+    });
+  } catch {
+    // Appwrite auth should still work if the demo sync endpoint is unavailable.
+    state.backendUser = null;
+  }
+}
+
+function AuthRequiredCard() {
+  return `
+    <section class="page-head auth-head">
+      <h1>Sign In Required</h1>
+      <p>Students and staff must sign in before opening the lost-and-found app pages. This keeps reports, claims, and dashboard actions tied to an account.</p>
+    </section>
+    <section class="panel auth-panel">
+      <div>
+        <h2>Continue to Lost Then Found</h2>
+        <p class="hint">Use email/password or Google sign-in. After signup, Appwrite sends an email verification link.</p>
+      </div>
+      <div class="actions">
+        <a class="button" href="/login?next=${authNextParam()}" data-link>Sign In</a>
+        <a class="button secondary" href="/signup?next=${authNextParam()}" data-link>Create Account</a>
+      </div>
+    </section>
+  `;
+}
+
+function AuthWarningBanner() {
+  if (!state.authUser || isEmailVerified(state.authUser)) {
+    return "";
+  }
+
+  return `
+    <section class="verify-banner" role="status" aria-live="polite">
+      <div>
+        <strong>Email verification needed</strong>
+        <span>${escapeHtml(state.authUser.email)} is signed in, but Appwrite has not marked this email as verified yet.</span>
+      </div>
+      <button class="secondary" data-resend-verification type="button">Resend verification email</button>
+    </section>
+  `;
+}
+
+function PageFrame(content) {
+  const notice = state.authNotice;
+  const error = state.authError;
+  state.authNotice = "";
+  state.authError = "";
+
+  return `
+    ${AuthWarningBanner()}
+    ${notice ? `<div class="success">${escapeHtml(notice)}</div>` : ""}
+    ${error ? `<div class="error">${escapeHtml(error)}</div>` : ""}
+    ${content}
+  `;
+}
+
+function ProtectedRoute(contentRenderer) {
+  if (state.authLoading) {
+    return PageFrame(`<div class="panel loading-panel">Checking your session...</div>`);
+  }
+
+  if (!state.authUser) {
+    return PageFrame(AuthRequiredCard());
+  }
+
+  return PageFrame(contentRenderer(state.authUser));
+}
+
+function requireSignedInPage() {
+  if (state.authLoading || !state.authUser) {
+    app.innerHTML = ProtectedRoute(() => "");
+    return false;
+  }
+  return true;
+}
+
+function getNextPath(defaultPath = "/browse") {
+  const params = new URLSearchParams(window.location.search);
+  const next = params.get("next") || defaultPath;
+  return next.startsWith("/") && !next.startsWith("//") ? next : defaultPath;
+}
+
+function AppwriteConfigWarning() {
+  if (hasAppwriteConfig()) {
+    return "";
+  }
+
+  return `
+    <div class="error">
+      Appwrite is missing its public config. Set VITE_APPWRITE_ENDPOINT and VITE_APPWRITE_PROJECT_ID before using authentication.
+    </div>
+  `;
+}
+
+function AuthFormIntro(mode) {
+  const isSignup = mode === "signup";
+  return `
+    <section class="page-head auth-head">
+      <h1>${isSignup ? "Create Account" : "Sign In"}</h1>
+      <p>${isSignup
+        ? "Create a student or staff account with Appwrite. The app signs you in and sends an email verification link immediately after signup."
+        : "Sign in with email/password or Google to open the lost-and-found app routes."}</p>
+    </section>
+  `;
+}
+
+async function LoginPage() {
+  const params = new URLSearchParams(window.location.search);
+  if (state.authUser) {
+    app.innerHTML = PageFrame(`
+      <section class="page-head auth-head">
+        <h1>Already Signed In</h1>
+        <p>${escapeHtml(authUserName())} is signed in.</p>
+      </section>
+      <div class="actions">
+        <a class="button" href="${escapeHtml(getNextPath())}" data-link>Continue</a>
+        <button class="secondary" data-logout type="button">Logout</button>
+      </div>
+    `);
+    return;
+  }
+
+  app.innerHTML = PageFrame(`
+    ${AuthFormIntro("login")}
+    <section class="panel auth-panel">
+      ${AppwriteConfigWarning()}
+      ${params.get("oauth") === "failed" ? `<div class="error">Google sign-in did not finish. Try again or use email/password.</div>` : ""}
+      <form id="login-form" class="auth-form" novalidate>
+        <div class="form-grid">
+          ${input("email", "Email", "student@pleasantvalley.edu", true, "email")}
+          <div class="field">
+            <label for="password">Password</label>
+            <input id="password" name="password" type="password" autocomplete="current-password" required>
+          </div>
+        </div>
+        <div class="actions">
+          <button type="submit" ${hasAppwriteConfig() ? "" : "disabled"}>Sign In</button>
+          <button class="secondary" data-google-login type="button" ${hasAppwriteConfig() ? "" : "disabled"}>Sign in with Google</button>
+        </div>
+        <div id="login-result" role="status"></div>
+      </form>
+      <p class="auth-switch">New to Lost Then Found? <a href="/signup?next=${encodeURIComponent(getNextPath())}" data-link>Create an account</a>.</p>
+    </section>
+  `);
+
+  document.querySelector("#login-form").addEventListener("submit", submitLogin);
+  document.querySelector("[data-google-login]").addEventListener("click", startGoogleLogin);
+}
+
+async function SignupPage() {
+  if (state.authUser) {
+    app.innerHTML = PageFrame(`
+      <section class="page-head auth-head">
+        <h1>Account Active</h1>
+        <p>${escapeHtml(authUserName())} is already signed in.</p>
+      </section>
+      <div class="actions">
+        <a class="button" href="${escapeHtml(getNextPath())}" data-link>Continue</a>
+      </div>
+    `);
+    return;
+  }
+
+  app.innerHTML = PageFrame(`
+    ${AuthFormIntro("signup")}
+    <section class="panel auth-panel">
+      ${AppwriteConfigWarning()}
+      <form id="signup-form" class="auth-form" novalidate>
+        <div class="form-grid">
+          ${input("name", "Full name", "Riley Chen", true)}
+          ${input("email", "Email", "student@pleasantvalley.edu", true, "email")}
+          <div class="field">
+            <label for="password">Password</label>
+            <input id="password" name="password" type="password" autocomplete="new-password" minlength="8" required>
+            <span class="hint">Appwrite requires at least 8 characters.</span>
+          </div>
+          <div class="field">
+            <label for="confirm_password">Confirm password</label>
+            <input id="confirm_password" name="confirm_password" type="password" autocomplete="new-password" minlength="8" required>
+          </div>
+        </div>
+        <div class="actions">
+          <button type="submit" ${hasAppwriteConfig() ? "" : "disabled"}>Create Account</button>
+          <button class="secondary" data-google-login type="button" ${hasAppwriteConfig() ? "" : "disabled"}>Sign up with Google</button>
+        </div>
+        <div id="signup-result" role="status"></div>
+      </form>
+      <p class="auth-switch">Already have an account? <a href="/login?next=${encodeURIComponent(getNextPath())}" data-link>Sign in</a>.</p>
+    </section>
+  `);
+
+  document.querySelector("#signup-form").addEventListener("submit", submitSignup);
+  document.querySelector("[data-google-login]").addEventListener("click", startGoogleLogin);
+}
+
+async function AuthCallbackPage() {
+  const next = getNextPath();
+  app.innerHTML = PageFrame(`<div class="panel loading-panel">Finishing Google sign-in...</div>`);
+  await loadAuthUser();
+
+  if (state.authUser) {
+    state.authNotice = "Signed in with Google.";
+    navigate(next);
+    return;
+  }
+
+  app.innerHTML = PageFrame(`
+    <section class="page-head auth-head">
+      <h1>Google Sign-In Failed</h1>
+      <p>Appwrite did not return an active session. Try again from the sign-in page.</p>
+    </section>
+    <a class="button" href="/login?next=${encodeURIComponent(next)}" data-link>Back to Sign In</a>
+  `);
+}
+
+async function VerifyEmailPage() {
+  const params = new URLSearchParams(window.location.search);
+  const userId = params.get("userId");
+  const secret = params.get("secret");
+
+  app.innerHTML = PageFrame(`<div class="panel loading-panel">Confirming email verification...</div>`);
+
+  if (!userId || !secret) {
+    app.innerHTML = PageFrame(`
+      <section class="page-head auth-head">
+        <h1>Verification Link Problem</h1>
+        <p>The verification link is missing userId or secret. Use the resend button after signing in to request a fresh link.</p>
+      </section>
+      <a class="button" href="/login" data-link>Sign In</a>
+    `);
+    return;
+  }
+
+  try {
+    // The verification email sends userId and secret in the URL. This page
+    // confirms them with Appwrite and then refreshes the current account.
+    await confirmEmailVerification(userId, secret);
+    await loadAuthUser();
+    state.authNotice = "Email verified. Your account is ready.";
+    app.innerHTML = PageFrame(`
+      <section class="page-head auth-head">
+        <h1>Email Verified</h1>
+        <p>Your Appwrite account email has been confirmed.</p>
+      </section>
+      <a class="button" href="/browse" data-link>Continue to App</a>
+    `);
+  } catch (error) {
+    app.innerHTML = PageFrame(`
+      <section class="page-head auth-head">
+        <h1>Verification Failed</h1>
+        <p>${escapeHtml(friendlyAuthError(error))}</p>
+      </section>
+      <div class="actions">
+        <a class="button" href="/login" data-link>Sign In</a>
+        ${state.authUser ? `<button class="secondary" data-resend-verification type="button">Resend verification email</button>` : ""}
+      </div>
+    `);
+  }
+}
+
+async function submitLogin(event) {
+  event.preventDefault();
+  const result = document.querySelector("#login-result");
+  const button = event.submitter;
+  const next = getNextPath();
+  button.disabled = true;
+  result.innerHTML = `<div class="notice">Signing in with Appwrite...</div>`;
+
+  try {
+    state.authUser = await loginWithEmail(formPayload(event.currentTarget));
+    await syncBackendUser();
+    state.authNotice = isEmailVerified(state.authUser)
+      ? "Signed in."
+      : "Signed in. Please verify your email to remove the warning banner.";
+    navigate(next);
+  } catch (error) {
+    result.innerHTML = `<div class="error">${escapeHtml(friendlyAuthError(error))}</div>`;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function submitSignup(event) {
+  event.preventDefault();
+  const result = document.querySelector("#signup-result");
+  const button = event.submitter;
+  const payload = formPayload(event.currentTarget);
+  const next = getNextPath();
+
+  if (payload.password !== payload.confirm_password) {
+    result.innerHTML = `<div class="error">Passwords must match.</div>`;
+    return;
+  }
+
+  button.disabled = true;
+  result.innerHTML = `<div class="notice">Creating your Appwrite account...</div>`;
+
+  try {
+    state.authUser = await signUpWithEmail(payload);
+    await syncBackendUser();
+    state.authNotice = "Account created. Appwrite sent a verification link to your email.";
+    navigate(next);
+  } catch (error) {
+    result.innerHTML = `<div class="error">${escapeHtml(friendlyAuthError(error))}</div>`;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function startGoogleLogin() {
+  const result = document.querySelector("#login-result, #signup-result");
+  if (result) {
+    result.innerHTML = `<div class="notice">Redirecting to Google through Appwrite...</div>`;
+  }
+
+  try {
+    signInWithGoogle(getNextPath());
+  } catch (error) {
+    if (result) {
+      result.innerHTML = `<div class="error">${escapeHtml(friendlyAuthError(error))}</div>`;
+    }
+  }
 }
 
 function Navbar() {
@@ -95,6 +475,12 @@ function Navbar() {
           ${links.map(([href, label]) => `
             <a class="nav-link ${current === href ? "active" : ""}" href="${href}" data-link>${label}</a>
           `).join("")}
+          ${state.authUser ? `
+            <span class="nav-user">${escapeHtml(authUserName())}</span>
+            <button class="nav-button secondary" data-logout type="button">Logout</button>
+          ` : `
+            <a class="nav-link ${current === "/login" ? "active" : ""}" href="/login" data-link>Sign In</a>
+          `}
         </div>
       </div>
     </nav>
@@ -219,37 +605,8 @@ function AdminTable({ columns, rows, empty = "No records yet." }) {
   `;
 }
 
-function ProtectedRoute(contentRenderer) {
-  const user = getAdminUser();
-  if (!user || user.role !== "admin") {
-    return `
-      <section class="page-head">
-        <h1>Admin Dashboard</h1>
-        <p>Admin routes require the demo admin account. Role access is checked again on every admin API request.</p>
-      </section>
-      <form id="admin-login" class="panel" novalidate>
-        <div class="form-grid">
-          <div class="field">
-            <label for="admin_name">Full name</label>
-            <input id="admin_name" name="full_name" value="Avery Patel" required>
-          </div>
-          <div class="field">
-            <label for="admin_email">Admin email</label>
-            <input id="admin_email" name="email" type="email" value="avery.patel@pleasantvalley.edu" required>
-          </div>
-        </div>
-        <div class="actions">
-          <button type="submit">Sign In</button>
-        </div>
-        <div id="admin-login-result" role="status"></div>
-      </form>
-    `;
-  }
-  return contentRenderer(user);
-}
-
 async function HomePage() {
-  app.innerHTML = `
+  app.innerHTML = PageFrame(`
     <section class="hero">
       <div class="hero-copy">
         <h1>Lost item recovery with matching, private claims, and admin verification.</h1>
@@ -275,7 +632,7 @@ async function HomePage() {
       <h2>Seven-minute judge path</h2>
       <p>Use the seeded calculator and AirPods examples, then submit a lost report, claim a match, approve the claim as admin, and show the notification plus audit log.</p>
     </section>
-  `;
+  `);
   try {
     const [items, claims, lostReports] = await Promise.all([
       api("/api/items"),
@@ -312,7 +669,11 @@ function metric(value, label) {
 }
 
 async function ReportLostPage() {
-  app.innerHTML = `
+  if (!requireSignedInPage()) {
+    return;
+  }
+
+  app.innerHTML = PageFrame(`
     <section class="page-head">
       <h1>Report Lost Item</h1>
       <p>Submit the details a student is likely to know. The backend immediately compares the report against found items by category, color, location, keywords, and date range.</p>
@@ -341,7 +702,7 @@ async function ReportLostPage() {
       </div>
       <div id="lost-result" role="status"></div>
     </form>
-  `;
+  `);
   document.querySelector("#date_lost").valueAsDate = new Date();
   document.querySelector("#lost-form").addEventListener("submit", submitLostReport);
 }
@@ -392,7 +753,11 @@ function MatchCard(match) {
 }
 
 async function ReportFoundPage() {
-  app.innerHTML = `
+  if (!requireSignedInPage()) {
+    return;
+  }
+
+  app.innerHTML = PageFrame(`
     <section class="page-head">
       <h1>Report Found Item</h1>
       <p>Found-item reports create a public-safe card and keep owner-verification clues private for staff review.</p>
@@ -427,7 +792,7 @@ async function ReportFoundPage() {
       </div>
       <div id="found-result" role="status"></div>
     </form>
-  `;
+  `);
   document.querySelector("#date_found").valueAsDate = new Date();
   document.querySelector("#found-form").addEventListener("submit", submitFoundItem);
 }
@@ -491,7 +856,11 @@ async function uploadPhoto(file) {
 }
 
 async function BrowsePage() {
-  app.innerHTML = `
+  if (!requireSignedInPage()) {
+    return;
+  }
+
+  app.innerHTML = PageFrame(`
     <section class="page-head">
       <h1>Browse Items</h1>
       <p>These cards intentionally hide storage location, finder contact, internal item codes, and private verification clues.</p>
@@ -501,7 +870,7 @@ async function BrowsePage() {
       <a class="button secondary" href="/report-found" data-link>Report Found Item</a>
     </div>
     <section id="items-grid" class="grid cards" aria-label="Found item cards"></section>
-  `;
+  `);
   try {
     const items = await api("/api/items");
     renderItems(items);
@@ -521,16 +890,20 @@ function renderItems(items) {
 }
 
 async function ClaimPage() {
+  if (!requireSignedInPage()) {
+    return;
+  }
+
   const params = new URLSearchParams(window.location.search);
   const itemId = params.get("item") || "";
-  app.innerHTML = `
+  app.innerHTML = PageFrame(`
     <section class="page-head">
       <h1>Claim Item</h1>
       <p>Ownership is not granted from the public card. A student must provide a private detail that staff can compare against sealed verification clues.</p>
     </section>
     <section id="claim-item-preview"></section>
     ${ClaimForm(itemId)}
-  `;
+  `);
   if (itemId) {
     try {
       const item = await api(`/api/items/${encodeURIComponent(itemId)}`);
@@ -574,36 +947,16 @@ async function AdminPage() {
   app.innerHTML = ProtectedRoute((user) => `
     <section class="page-head">
       <h1>Admin Dashboard</h1>
-      <p>Signed in as ${escapeHtml(user.full_name || user.fullName || user.email)}. View reports, review claims, archive resolved items, and inspect audit logs.</p>
+      <p>Signed in as ${escapeHtml(authUserName(user))}. View reports, review claims, archive resolved items, and inspect audit logs.</p>
     </section>
     <div id="admin-dashboard">
       <div class="notice">Loading admin records...</div>
     </div>
   `);
-  const login = document.querySelector("#admin-login");
-  if (login) {
-    login.addEventListener("submit", submitAdminLogin);
+  if (!state.authUser) {
     return;
   }
   await loadAdminDashboard();
-}
-
-async function submitAdminLogin(event) {
-  event.preventDefault();
-  const result = document.querySelector("#admin-login-result");
-  try {
-    const user = await api("/api/auth/signin", {
-      method: "POST",
-      body: JSON.stringify(formPayload(event.currentTarget))
-    });
-    if (user.role !== "admin") {
-      throw new Error("This account is not an admin.");
-    }
-    setAdminUser(user);
-    render();
-  } catch (error) {
-    result.innerHTML = `<div class="error">${escapeHtml(error.message)}</div>`;
-  }
 }
 
 async function loadAdminDashboard() {
@@ -838,7 +1191,7 @@ function bindAdminActions() {
   });
   document.querySelectorAll("[data-assign-case]").forEach((button) => {
     button.addEventListener("click", () => adminDecision(`/api/recovery-cases/${button.dataset.assignCase}/assign`, "Recovery case assigned.", {
-      assigned_to: getAdminUser()?.email || ""
+      assigned_to: state.authUser?.email || ""
     }));
   });
   document.querySelectorAll("[data-create-mission]").forEach((button) => {
@@ -897,12 +1250,13 @@ async function adminDecision(path, message, body = {}) {
 }
 
 async function SourcesPage() {
-  app.innerHTML = `
+  app.innerHTML = PageFrame(`
     <section class="page-head">
       <h1>Sources / Licenses</h1>
-      <p>The project uses the existing Spring Boot and MongoDB backend with a custom static frontend. No paid service is required for the demo email workflow.</p>
+      <p>The project uses the existing Spring Boot and MongoDB backend, the custom static frontend, and Appwrite Web SDK for browser authentication.</p>
     </section>
     <ul class="source-list">
+      ${source("Appwrite Web SDK and Auth documentation", "Email/password auth, Google OAuth sessions, and email verification", "https://appwrite.io/docs/products/auth/email-password")}
       ${source("Spring Boot documentation", "Backend framework, MVC routing, validation, configuration", "https://docs.spring.io/spring-boot/index.html")}
       ${source("MongoDB documentation", "Database and document collection model", "https://www.mongodb.com/docs/manual/")}
       ${source("MDN History API", "Browser routing with history.pushState", "https://developer.mozilla.org/en-US/docs/Web/API/History_API")}
@@ -911,9 +1265,9 @@ async function SourcesPage() {
     </ul>
     <section class="panel">
       <h2>License Notes</h2>
-      <p>The web UI does not import third-party frontend libraries or paid assets. Seed images referenced by demo records are placeholders unless supplied by the school.</p>
+      <p>The auth UI imports the Appwrite Web SDK from a pinned CDN version. No paid assets are included, and seed images referenced by demo records are placeholders unless supplied by the school.</p>
     </section>
-  `;
+  `);
 }
 
 function source(title, description, href) {
@@ -952,15 +1306,29 @@ function formPayload(form) {
   return payload;
 }
 
-function render() {
+async function render() {
   header.innerHTML = Navbar();
   footer.innerHTML = Footer();
   const page = routes[window.location.pathname] || BrowsePage;
-  page();
+  await page();
   app.focus({ preventScroll: true });
 }
 
 document.addEventListener("click", (event) => {
+  const logoutButton = event.target.closest("[data-logout]");
+  if (logoutButton) {
+    event.preventDefault();
+    handleLogout(logoutButton);
+    return;
+  }
+
+  const resendButton = event.target.closest("[data-resend-verification]");
+  if (resendButton) {
+    event.preventDefault();
+    handleResendVerification(resendButton);
+    return;
+  }
+
   const link = event.target.closest("[data-link]");
   if (!link) {
     return;
@@ -973,5 +1341,44 @@ document.addEventListener("click", (event) => {
   navigate(url.pathname + url.search);
 });
 
-window.addEventListener("popstate", render);
-render();
+async function handleLogout(button) {
+  button.disabled = true;
+  try {
+    await logoutCurrentSession();
+    state.authUser = null;
+    state.backendUser = null;
+    state.authNotice = "Logged out.";
+    navigate("/");
+  } catch (error) {
+    state.authError = friendlyAuthError(error);
+    await render();
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function handleResendVerification(button) {
+  button.disabled = true;
+  try {
+    await resendVerificationEmail();
+    state.authNotice = "Verification email sent. Check your inbox for the Appwrite link.";
+    await render();
+  } catch (error) {
+    state.authError = friendlyAuthError(error);
+    await render();
+  } finally {
+    button.disabled = false;
+  }
+}
+
+window.addEventListener("popstate", () => {
+  render();
+});
+
+async function start() {
+  app.innerHTML = `<div class="panel loading-panel">Checking your session...</div>`;
+  await loadAuthUser();
+  await render();
+}
+
+start();
