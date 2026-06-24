@@ -1,10 +1,24 @@
-import { Account, Client, ID } from "https://cdn.jsdelivr.net/npm/appwrite@26.0.0/+esm";
+import {
+  Account,
+  Channel,
+  Client,
+  Databases,
+  ID,
+  Permission,
+  Query,
+  Realtime,
+  Role
+} from "https://cdn.jsdelivr.net/npm/appwrite@26.0.0/+esm";
 
 const runtimeConfig = window.__APPWRITE_CONFIG__ || {};
 
 export const appwriteConfig = {
   endpoint: runtimeConfig.endpoint || "",
-  projectId: runtimeConfig.projectId || ""
+  projectId: runtimeConfig.projectId || "",
+  databaseId: runtimeConfig.databaseId || "",
+  chatConversationsCollectionId: runtimeConfig.chatConversationsCollectionId || "",
+  chatMessagesCollectionId: runtimeConfig.chatMessagesCollectionId || "",
+  adminTeamId: runtimeConfig.adminTeamId || ""
 };
 
 const client = new Client();
@@ -16,6 +30,9 @@ if (appwriteConfig.endpoint && appwriteConfig.projectId) {
 }
 
 export const account = new Account(client);
+export const databases = new Databases(client);
+export const realtime = new Realtime(client);
+export { Channel, ID, Permission, Query, Role };
 
 export function hasAppwriteConfig() {
   return Boolean(appwriteConfig.endpoint && appwriteConfig.projectId);

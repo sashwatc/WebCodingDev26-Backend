@@ -12,6 +12,8 @@ public class WebRouteController {
             "/browse",
             "/claim",
             "/admin",
+            "/chat",
+            "/admin/chat",
             "/login",
             "/signup",
             "/verify-email",

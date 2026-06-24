@@ -10,6 +10,20 @@ import {
   signInWithGoogle,
   signUpWithEmail
 } from "./lib/appwrite.js";
+import {
+  chatConfigError,
+  getAdminUnreadCount,
+  getStudentConversation,
+  getStudentUnreadCount,
+  hasChatConfig,
+  listAdminConversations,
+  listConversationMessages,
+  markConversationRead,
+  sendAdminMessage,
+  sendStudentMessage,
+  subscribeToAdminChat,
+  subscribeToConversation
+} from "./lib/chat.js";
 
 const app = document.querySelector("#app");
 const header = document.querySelector("#site-header");
@@ -22,6 +36,8 @@ const routes = {
   "/browse": BrowsePage,
   "/claim": ClaimPage,
   "/admin": AdminPage,
+  "/chat": StudentChatPage,
+  "/admin/chat": AdminChatPage,
   "/login": LoginPage,
   "/signup": SignupPage,
   "/verify-email": VerifyEmailPage,
@@ -36,7 +52,11 @@ const state = {
   authUser: null,
   backendUser: null,
   authNotice: "",
-  authError: ""
+  authError: "",
+  studentChatUnreadCount: 0,
+  adminChatUnreadCount: 0,
+  chatUnsubscribe: null,
+  chatRefreshTimer: null
 };
 
 function escapeHtml(value) {
@@ -109,9 +129,12 @@ async function loadAuthUser() {
   try {
     state.authUser = await getCurrentUser();
     await syncBackendUser();
+    await refreshChatBadges();
   } catch {
     state.authUser = null;
     state.backendUser = null;
+    state.studentChatUnreadCount = 0;
+    state.adminChatUnreadCount = 0;
   } finally {
     state.authLoading = false;
   }
@@ -134,6 +157,50 @@ async function syncBackendUser() {
     // Appwrite auth should still work if the demo sync endpoint is unavailable.
     state.backendUser = null;
   }
+}
+
+function isAdminUser() {
+  return state.backendUser?.role === "admin";
+}
+
+async function refreshChatBadges() {
+  if (!state.authUser || !hasChatConfig()) {
+    state.studentChatUnreadCount = 0;
+    state.adminChatUnreadCount = 0;
+    return;
+  }
+
+  if (isAdminUser()) {
+    state.adminChatUnreadCount = await getAdminUnreadCount();
+    state.studentChatUnreadCount = 0;
+    return;
+  }
+
+  state.studentChatUnreadCount = await getStudentUnreadCount(state.authUser);
+  state.adminChatUnreadCount = 0;
+}
+
+function ChatConfigWarning() {
+  const message = chatConfigError();
+  return message ? `<div class="error">${escapeHtml(message)}</div>` : "";
+}
+
+function cleanupChatSubscription() {
+  if (state.chatUnsubscribe) {
+    state.chatUnsubscribe();
+    state.chatUnsubscribe = null;
+  }
+  if (state.chatRefreshTimer) {
+    window.clearTimeout(state.chatRefreshTimer);
+    state.chatRefreshTimer = null;
+  }
+}
+
+function scheduleChatRefresh(callback) {
+  if (state.chatRefreshTimer) {
+    window.clearTimeout(state.chatRefreshTimer);
+  }
+  state.chatRefreshTimer = window.setTimeout(callback, 160);
 }
 
 function AuthRequiredCard() {
@@ -197,9 +264,37 @@ function ProtectedRoute(contentRenderer) {
   return PageFrame(contentRenderer(state.authUser));
 }
 
+function AdminOnlyRoute(contentRenderer) {
+  if (state.authLoading || !state.authUser) {
+    return ProtectedRoute(contentRenderer);
+  }
+
+  if (!isAdminUser()) {
+    return PageFrame(`
+      <section class="page-head">
+        <h1>Admin Access Required</h1>
+        <p>This chat dashboard is limited to the admin account configured for the FBLA demo.</p>
+      </section>
+      <section class="panel">
+        <p class="hint">Sign in with the configured admin email, then make sure that account is a member of the Appwrite admin team for chat permissions.</p>
+      </section>
+    `);
+  }
+
+  return PageFrame(contentRenderer(state.authUser));
+}
+
 function requireSignedInPage() {
   if (state.authLoading || !state.authUser) {
     app.innerHTML = ProtectedRoute(() => "");
+    return false;
+  }
+  return true;
+}
+
+function requireAdminPage() {
+  if (state.authLoading || !state.authUser || !isAdminUser()) {
+    app.innerHTML = AdminOnlyRoute(() => "");
     return false;
   }
   return true;
@@ -453,6 +548,301 @@ function startGoogleLogin() {
   }
 }
 
+function chatUnreadBadge(count) {
+  const value = Number(count || 0);
+  return value > 0 ? `<span class="chat-badge" aria-label="${value} unread messages">${value}</span>` : "";
+}
+
+function formatChatTime(value) {
+  if (!value) {
+    return "";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return escapeHtml(value);
+  }
+  return escapeHtml(date.toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  }));
+}
+
+function ChatMessage(message, currentUserId) {
+  const isMine = message.senderId === currentUserId;
+  const role = message.senderRole === "admin" ? "Admin" : "Student";
+  return `
+    <article class="chat-message ${isMine ? "mine" : "theirs"}">
+      <div class="chat-message-meta">
+        <strong>${escapeHtml(message.senderName || role)}</strong>
+        <span>${escapeHtml(role)} - ${formatChatTime(message.createdAt)}</span>
+      </div>
+      <p>${escapeHtml(message.messageText)}</p>
+    </article>
+  `;
+}
+
+function ChatThread(messages, currentUserId) {
+  if (!messages.length) {
+    return `
+      <section class="empty-state chat-empty">
+        <p>No messages yet. Send a short note and the admin team can reply from their dashboard.</p>
+      </section>
+    `;
+  }
+
+  return `
+    <section class="chat-thread" aria-label="Chat messages">
+      ${messages.map((message) => ChatMessage(message, currentUserId)).join("")}
+    </section>
+  `;
+}
+
+function ChatComposer(formId, placeholder, disabled = false) {
+  return `
+    <form id="${formId}" class="chat-composer" novalidate>
+      <label for="${formId}_message">Message</label>
+      <textarea id="${formId}_message" name="messageText" rows="3" placeholder="${escapeHtml(placeholder)}" ${disabled ? "disabled" : ""} required></textarea>
+      <div class="actions">
+        <button type="submit" ${disabled ? "disabled" : ""}>Send Message</button>
+      </div>
+      <div id="${formId}-result" role="status"></div>
+    </form>
+  `;
+}
+
+async function StudentChatPage() {
+  if (!requireSignedInPage()) {
+    return;
+  }
+
+  cleanupChatSubscription();
+  app.innerHTML = PageFrame(`
+    <section class="page-head">
+      <h1>Chat with Admin</h1>
+      <p>Ask a private question about a lost report, found item, claim, or pickup. Messages are stored in Appwrite Databases and connected to your account.</p>
+    </section>
+    <section id="student-chat-region" class="chat-shell">
+      <div class="panel loading-panel">Loading your conversation...</div>
+    </section>
+  `);
+
+  if (!hasChatConfig()) {
+    document.querySelector("#student-chat-region").innerHTML = ChatConfigWarning();
+    return;
+  }
+
+  await loadStudentChat();
+  try {
+    const conversation = await getStudentConversation(state.authUser);
+    state.chatUnsubscribe = await subscribeToConversation(conversation.conversationId, () => {
+      scheduleChatRefresh(loadStudentChat);
+    });
+  } catch {
+    // Realtime is helpful, but the form still refreshes after sends if WebSocket setup fails.
+  }
+}
+
+async function loadStudentChat() {
+  const target = document.querySelector("#student-chat-region");
+  if (!target) {
+    return;
+  }
+
+  try {
+    const conversation = await getStudentConversation(state.authUser);
+    const messages = await listConversationMessages(conversation.conversationId);
+    await markConversationRead(conversation, "student");
+    state.studentChatUnreadCount = 0;
+    header.innerHTML = Navbar();
+    target.innerHTML = `
+      <div class="chat-layout single">
+        <section class="chat-main panel">
+          <div class="chat-main-head">
+            <div>
+              <h2>Admin Team</h2>
+              <p class="hint">Conversation ID: ${escapeHtml(conversation.conversationId)}</p>
+            </div>
+            ${chatUnreadBadge(conversation.studentUnreadCount)}
+          </div>
+          ${ChatThread(messages, state.authUser.$id)}
+          ${ChatComposer("student-chat-form", "Type your message for the admin team")}
+        </section>
+      </div>
+    `;
+    document.querySelector("#student-chat-form").addEventListener("submit", (event) => submitStudentChat(event));
+  } catch (error) {
+    target.innerHTML = `<div class="error">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+async function submitStudentChat(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const result = document.querySelector("#student-chat-form-result");
+  const button = event.submitter;
+  const payload = formPayload(form);
+
+  if (!payload.messageText) {
+    result.innerHTML = `<div class="error">Enter a message before sending.</div>`;
+    return;
+  }
+
+  button.disabled = true;
+  result.innerHTML = `<div class="notice">Sending message...</div>`;
+
+  try {
+    await sendStudentMessage(state.authUser, payload.messageText);
+    form.reset();
+    await refreshChatBadges();
+    header.innerHTML = Navbar();
+    await loadStudentChat();
+  } catch (error) {
+    result.innerHTML = `<div class="error">${escapeHtml(error.message)}</div>`;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function ConversationList(conversations, activeConversationId) {
+  if (!conversations.length) {
+    return `<section class="empty-state chat-empty"><p>No student conversations yet.</p></section>`;
+  }
+
+  return `
+    <div class="conversation-list" role="list">
+      ${conversations.map((conversation) => `
+        <a class="conversation-row ${conversation.conversationId === activeConversationId ? "active" : ""}" href="/admin/chat?conversation=${encodeURIComponent(conversation.conversationId)}" data-link role="listitem">
+          <span>
+            <strong>${escapeHtml(conversation.studentName || "Student")}</strong>
+            <small>${escapeHtml(conversation.studentEmail || conversation.studentId)}</small>
+          </span>
+          ${chatUnreadBadge(conversation.adminUnreadCount)}
+          <em>${escapeHtml(conversation.lastMessageText || "No messages yet")}</em>
+        </a>
+      `).join("")}
+    </div>
+  `;
+}
+
+async function AdminChatPage() {
+  if (!requireAdminPage()) {
+    return;
+  }
+
+  cleanupChatSubscription();
+  app.innerHTML = AdminOnlyRoute(() => `
+    <section class="page-head">
+      <h1>Admin Chat</h1>
+      <p>View student conversations, read new messages, and reply as the admin team.</p>
+    </section>
+    <section id="admin-chat-region" class="chat-shell">
+      <div class="panel loading-panel">Loading student conversations...</div>
+    </section>
+  `);
+
+  if (!hasChatConfig()) {
+    document.querySelector("#admin-chat-region").innerHTML = ChatConfigWarning();
+    return;
+  }
+
+  await loadAdminChat();
+  try {
+    state.chatUnsubscribe = await subscribeToAdminChat(() => {
+      scheduleChatRefresh(loadAdminChat);
+    });
+  } catch {
+    // The admin dashboard still works with manual refresh after send.
+  }
+}
+
+async function loadAdminChat() {
+  const target = document.querySelector("#admin-chat-region");
+  if (!target) {
+    return;
+  }
+
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const conversations = await listAdminConversations();
+    const activeConversationId = params.get("conversation") || conversations[0]?.conversationId || "";
+    const activeConversation = conversations.find((conversation) => conversation.conversationId === activeConversationId);
+    const messages = activeConversation ? await listConversationMessages(activeConversation.conversationId) : [];
+
+    if (activeConversation) {
+      await markConversationRead(activeConversation, "admin");
+      activeConversation.adminUnreadCount = 0;
+    }
+
+    state.adminChatUnreadCount = conversations.reduce((total, conversation) => total + Number(conversation.adminUnreadCount || 0), 0);
+    header.innerHTML = Navbar();
+    target.innerHTML = `
+      <div class="chat-layout admin">
+        <aside class="chat-sidebar panel" aria-label="Student conversations">
+          <div class="chat-sidebar-head">
+            <h2>Conversations</h2>
+            ${chatUnreadBadge(state.adminChatUnreadCount)}
+          </div>
+          ${ConversationList(conversations, activeConversationId)}
+        </aside>
+        <section class="chat-main panel">
+          ${activeConversation ? `
+            <div class="chat-main-head">
+              <div>
+                <h2>${escapeHtml(activeConversation.studentName || "Student")}</h2>
+                <p class="hint">${escapeHtml(activeConversation.studentEmail || activeConversation.studentId)}</p>
+              </div>
+            </div>
+            ${ChatThread(messages, state.authUser.$id)}
+            ${ChatComposer("admin-chat-form", "Reply to this student")}
+          ` : `
+            <section class="empty-state chat-empty">
+              <p>Select a student conversation when messages arrive.</p>
+            </section>
+            ${ChatComposer("admin-chat-form", "Select a conversation before replying", true)}
+          `}
+        </section>
+      </div>
+    `;
+
+    const form = document.querySelector("#admin-chat-form");
+    if (form && activeConversation) {
+      form.addEventListener("submit", (event) => submitAdminChat(event, activeConversation));
+    }
+  } catch (error) {
+    target.innerHTML = `<div class="error">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+async function submitAdminChat(event, conversation) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const result = document.querySelector("#admin-chat-form-result");
+  const button = event.submitter;
+  const payload = formPayload(form);
+
+  if (!payload.messageText) {
+    result.innerHTML = `<div class="error">Enter a reply before sending.</div>`;
+    return;
+  }
+
+  button.disabled = true;
+  result.innerHTML = `<div class="notice">Sending reply...</div>`;
+
+  try {
+    await sendAdminMessage(state.authUser, conversation, payload.messageText);
+    form.reset();
+    await refreshChatBadges();
+    header.innerHTML = Navbar();
+    await loadAdminChat();
+  } catch (error) {
+    result.innerHTML = `<div class="error">${escapeHtml(error.message)}</div>`;
+  } finally {
+    button.disabled = false;
+  }
+}
+
 function Navbar() {
   const links = [
     ["/", "Home"],
@@ -460,9 +850,16 @@ function Navbar() {
     ["/report-found", "Report Found"],
     ["/browse", "Browse"],
     ["/claim", "Claim"],
-    ["/admin", "Admin"],
     ["/sources", "Sources"]
   ];
+  if (state.authUser && !isAdminUser()) {
+    links.splice(5, 0, ["/chat", `Contact Admin ${state.studentChatUnreadCount ? `(${state.studentChatUnreadCount})` : ""}`]);
+  }
+  if (state.authUser && isAdminUser()) {
+    links.splice(5, 0, ["/admin", "Admin"], ["/admin/chat", `Admin Chat ${state.adminChatUnreadCount ? `(${state.adminChatUnreadCount})` : ""}`]);
+  } else {
+    links.splice(5, 0, ["/admin", "Admin"]);
+  }
   const current = window.location.pathname;
   return `
     <nav class="site-header" aria-label="Primary">
@@ -473,7 +870,7 @@ function Navbar() {
         </a>
         <div class="nav-links">
           ${links.map(([href, label]) => `
-            <a class="nav-link ${current === href ? "active" : ""}" href="${href}" data-link>${label}</a>
+            <a class="nav-link ${current === href ? "active" : ""}" href="${href}" data-link>${escapeHtml(label)}</a>
           `).join("")}
           ${state.authUser ? `
             <span class="nav-user">${escapeHtml(authUserName())}</span>
@@ -1257,6 +1654,9 @@ async function SourcesPage() {
     </section>
     <ul class="source-list">
       ${source("Appwrite Web SDK and Auth documentation", "Email/password auth, Google OAuth sessions, and email verification", "https://appwrite.io/docs/products/auth/email-password")}
+      ${source("Appwrite Databases documentation", "Student-admin chat conversations and messages stored as Appwrite documents", "https://appwrite.io/docs/references/cloud/client-web/databases")}
+      ${source("Appwrite Permissions documentation", "Row security and user/team permissions for chat access control", "https://appwrite.io/docs/advanced/security/permissions")}
+      ${source("Appwrite Realtime documentation", "Live chat refresh when conversation documents change", "https://appwrite.io/docs/apis/realtime")}
       ${source("Spring Boot documentation", "Backend framework, MVC routing, validation, configuration", "https://docs.spring.io/spring-boot/index.html")}
       ${source("MongoDB documentation", "Database and document collection model", "https://www.mongodb.com/docs/manual/")}
       ${source("MDN History API", "Browser routing with history.pushState", "https://developer.mozilla.org/en-US/docs/Web/API/History_API")}
@@ -1265,7 +1665,7 @@ async function SourcesPage() {
     </ul>
     <section class="panel">
       <h2>License Notes</h2>
-      <p>The auth UI imports the Appwrite Web SDK from a pinned CDN version. No paid assets are included, and seed images referenced by demo records are placeholders unless supplied by the school.</p>
+      <p>The auth and chat UI import the Appwrite Web SDK from a pinned CDN version. No paid assets are included, and seed images referenced by demo records are placeholders unless supplied by the school.</p>
     </section>
   `);
 }
@@ -1307,6 +1707,9 @@ function formPayload(form) {
 }
 
 async function render() {
+  if (!window.location.pathname.includes("chat")) {
+    cleanupChatSubscription();
+  }
   header.innerHTML = Navbar();
   footer.innerHTML = Footer();
   const page = routes[window.location.pathname] || BrowsePage;
@@ -1344,9 +1747,12 @@ document.addEventListener("click", (event) => {
 async function handleLogout(button) {
   button.disabled = true;
   try {
+    cleanupChatSubscription();
     await logoutCurrentSession();
     state.authUser = null;
     state.backendUser = null;
+    state.studentChatUnreadCount = 0;
+    state.adminChatUnreadCount = 0;
     state.authNotice = "Logged out.";
     navigate("/");
   } catch (error) {

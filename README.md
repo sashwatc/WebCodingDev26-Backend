@@ -6,7 +6,8 @@ School lost-and-found recovery platform built for FBLA Website Coding & Developm
 
 - Frontend: this checkout did not include the referenced sibling Vite/React app, so the upgraded demo UI is a focused static HTML/CSS/JavaScript app served from Spring Boot `src/main/resources/static`.
 - Browser auth: Appwrite Web SDK handles email/password signup and login, Google OAuth, current-session lookup, email verification, verification resend, and logout.
-- Routing: browser routes use the History API, with Spring MVC forwarding app and auth routes such as `/login`, `/signup`, `/verify-email`, and `/auth/callback` to `index.html`.
+- Student-admin chat: Appwrite Databases stores chat conversations and messages, with Appwrite Realtime subscriptions for live refresh when supported by the browser/network.
+- Routing: browser routes use the History API, with Spring MVC forwarding app and auth routes such as `/chat`, `/admin/chat`, `/login`, `/signup`, `/verify-email`, and `/auth/callback` to `index.html`.
 - Backend: Java 21, Spring Boot 4.1, Spring Web MVC, Bean Validation, Spring Data MongoDB.
 - Database: MongoDB Atlas or local MongoDB through `MONGO_URI` and `MONGO_DATABASE`.
 - Core models: `FoundItem`, `LostReport`, `Claim`, `AppUser`, `Notification`, `AuditLog`, `MatchSuggestion`.
@@ -18,7 +19,7 @@ School lost-and-found recovery platform built for FBLA Website Coding & Developm
 cp .env.example .env
 ```
 
-Fill in `MONGO_URI`, `MONGO_DATABASE`, `ADMIN_EMAIL`, `VITE_APPWRITE_ENDPOINT`, and `VITE_APPWRITE_PROJECT_ID`. For a local MongoDB profile:
+Fill in `MONGO_URI`, `MONGO_DATABASE`, `ADMIN_EMAIL`, and the Appwrite `VITE_APPWRITE_*` values. For a local MongoDB profile:
 
 ```bash
 SPRING_PROFILES_ACTIVE=local ./mvnw spring-boot:run
@@ -57,6 +58,10 @@ FRONTEND_URL=http://localhost:8080
 ADMIN_EMAIL=avery.patel@pleasantvalley.edu
 VITE_APPWRITE_ENDPOINT=https://cloud.appwrite.io/v1
 VITE_APPWRITE_PROJECT_ID=fill_this_in
+VITE_APPWRITE_DATABASE_ID=fill_this_in
+VITE_APPWRITE_CHAT_CONVERSATIONS_COLLECTION_ID=chat_conversations
+VITE_APPWRITE_CHAT_MESSAGES_COLLECTION_ID=chat_messages
+VITE_APPWRITE_ADMIN_TEAM_ID=fill_this_in
 SEED_DATA_ENABLED=true
 AI_MATCHMAKING_ENABLED=true
 AI_API_KEY=
@@ -80,6 +85,18 @@ Appwrite setup:
 - Enable Email/Password auth and the Google OAuth provider in Appwrite Auth settings.
 - In Google OAuth settings, use the redirect URL Appwrite shows in its provider setup modal.
 - Appwrite verification emails redirect back to `/verify-email`, where the app reads `userId` and `secret`.
+- Create an Appwrite database with two collections: `chat_conversations` and `chat_messages`.
+- Enable row security on both chat collections.
+- Give table-level `create` permission to authenticated users, and table-level `read` plus `update` permissions to the Appwrite admin team.
+- Set `VITE_APPWRITE_ADMIN_TEAM_ID` to that team ID and add admin users to the team.
+
+Chat collection attributes:
+
+`chat_conversations`: `conversationId`, `studentId`, `studentName`, `studentEmail`, `adminTeamId`, `lastMessageText`, `lastMessageAt`, `studentUnreadCount`, `adminUnreadCount`, `createdAt`, `updatedAt`.
+
+`chat_messages`: `messageId`, `conversationId`, `senderId`, `senderName`, `senderRole`, `messageText`, `createdAt`, `read`.
+
+Recommended indexes: `studentId`, `conversationId`, `senderRole`, `read`, `updatedAt`, and `createdAt`.
 
 ## Web Routes
 
@@ -89,6 +106,8 @@ Appwrite setup:
 - `/browse` - Public-safe found item cards
 - `/claim` - Claim form with secret ownership detail
 - `/admin` - Admin dashboard for claims, reports, items, archive actions, and audit log
+- `/chat` - Student-to-admin conversation
+- `/admin/chat` - Admin chat dashboard with all permitted student conversations
 - `/login` - Appwrite email/password and Google sign-in
 - `/signup` - Appwrite email/password signup with immediate session and verification email
 - `/verify-email` - Appwrite email verification callback
