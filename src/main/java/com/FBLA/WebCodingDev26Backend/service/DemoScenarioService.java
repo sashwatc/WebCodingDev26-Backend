@@ -2,7 +2,10 @@ package com.FBLA.WebCodingDev26Backend.service;
 
 import com.FBLA.WebCodingDev26Backend.dto.DemoScenarioResponse;
 import com.FBLA.WebCodingDev26Backend.dto.PatternReviewResult;
+import com.FBLA.WebCodingDev26Backend.dto.ReturnPassRequest;
+import com.FBLA.WebCodingDev26Backend.dto.ReturnPassResponse;
 import com.FBLA.WebCodingDev26Backend.exception.BadRequestException;
+import com.FBLA.WebCodingDev26Backend.model.AppUser;
 import com.FBLA.WebCodingDev26Backend.model.AuditLog;
 import com.FBLA.WebCodingDev26Backend.model.Claim;
 import com.FBLA.WebCodingDev26Backend.model.FoundItem;
@@ -14,8 +17,13 @@ import com.FBLA.WebCodingDev26Backend.repository.AuditLogRepository;
 import com.FBLA.WebCodingDev26Backend.repository.ClaimRepository;
 import com.FBLA.WebCodingDev26Backend.repository.FoundItemRepository;
 import com.FBLA.WebCodingDev26Backend.repository.LostReportRepository;
+import com.FBLA.WebCodingDev26Backend.repository.PreventionAlertRepository;
+import com.FBLA.WebCodingDev26Backend.repository.RecoveryCaseRepository;
+import com.FBLA.WebCodingDev26Backend.repository.RecoveryMissionRepository;
+import com.FBLA.WebCodingDev26Backend.repository.ReturnPassRepository;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -33,6 +41,12 @@ public class DemoScenarioService {
     private final AuditLogRepository auditLogs;
     private final RecoveryCaseService recoveryCaseService;
     private final LossSentinelService lossSentinelService;
+    private final AdminWorkflowService adminWorkflowService;
+    private final ReturnPassService returnPassService;
+    private final RecoveryCaseRepository recoveryCases;
+    private final RecoveryMissionRepository recoveryMissions;
+    private final PreventionAlertRepository preventionAlerts;
+    private final ReturnPassRepository returnPasses;
     private final ClockService clock;
     private final InputSanitizer sanitizer;
 
@@ -43,6 +57,12 @@ public class DemoScenarioService {
             AuditLogRepository auditLogs,
             RecoveryCaseService recoveryCaseService,
             LossSentinelService lossSentinelService,
+            AdminWorkflowService adminWorkflowService,
+            ReturnPassService returnPassService,
+            RecoveryCaseRepository recoveryCases,
+            RecoveryMissionRepository recoveryMissions,
+            PreventionAlertRepository preventionAlerts,
+            ReturnPassRepository returnPasses,
             ClockService clock,
             InputSanitizer sanitizer
     ) {
@@ -52,6 +72,12 @@ public class DemoScenarioService {
         this.auditLogs = auditLogs;
         this.recoveryCaseService = recoveryCaseService;
         this.lossSentinelService = lossSentinelService;
+        this.adminWorkflowService = adminWorkflowService;
+        this.returnPassService = returnPassService;
+        this.recoveryCases = recoveryCases;
+        this.recoveryMissions = recoveryMissions;
+        this.preventionAlerts = preventionAlerts;
+        this.returnPasses = returnPasses;
         this.clock = clock;
         this.sanitizer = sanitizer;
     }
@@ -61,11 +87,32 @@ public class DemoScenarioService {
         Map<String, Object> sanitized = sanitizer.sanitizeMap(data);
         return switch (normalized) {
             case "airpods_gym", "airpods_at_gym", "gym_airpods" -> airPodsAtGym(sanitized, adminEmail);
+            case "approved_calculator_return", "calculator_return", "calculator" -> approvedCalculatorReturn(adminEmail);
             case "gym_electronics_pattern", "pattern_review", "loss_sentinel" -> gymElectronicsPattern(adminEmail);
             case "library_water_bottle", "water_bottle" -> libraryWaterBottle(sanitized, adminEmail);
             case "custom" -> customScenario(sanitized, adminEmail);
-            default -> throw new BadRequestException("Unknown demo scenario. Use airpods_gym, gym_electronics_pattern, library_water_bottle, or custom.");
+            default -> throw new BadRequestException("Unknown demo scenario. Use airpods_gym, approved_calculator_return, gym_electronics_pattern, library_water_bottle, or custom.");
         };
+    }
+
+    public Map<String, Object> cleanup(Map<String, Object> data, String adminEmail) {
+        Map<String, Object> sanitized = sanitizer.sanitizeMap(data);
+        String confirmation = value(sanitized, "confirmation", value(sanitized, "confirm", ""));
+        if (!"DELETE DEMO DATA".equals(confirmation)) {
+            throw new BadRequestException("Cleanup requires confirmation: DELETE DEMO DATA");
+        }
+
+        Map<String, Integer> deleted = new LinkedHashMap<>();
+        deleted.put("return_passes", deleteDemoReturnPasses());
+        deleted.put("claims", deleteDemoClaims());
+        deleted.put("found_items", deleteDemoFoundItems());
+        deleted.put("recovery_missions", deleteDemoMissions());
+        deleted.put("recovery_cases", deleteDemoCases());
+        deleted.put("prevention_alerts", deleteDemoAlerts());
+        deleted.put("lost_reports", deleteDemoLostReports());
+
+        audit("DEMO_SCENARIO_CLEANUP", "DemoScenario", "cleanup", adminEmail, "Deleted demo-only records after explicit confirmation.");
+        return Map.of("success", true, "deleted", deleted, "confirmation", "DELETE DEMO DATA");
     }
 
     private DemoScenarioResponse airPodsAtGym(Map<String, Object> data, String adminEmail) {
@@ -163,6 +210,102 @@ public class DemoScenarioService {
                 foundIds,
                 claimIds,
                 Map.of("next_step", "Open Recovery Center and review the pending AirPods claim.")
+        );
+    }
+
+    private DemoScenarioResponse approvedCalculatorReturn(String adminEmail) {
+        AppUser admin = adminUser(adminEmail);
+        List<String> foundIds = new ArrayList<>();
+        List<String> claimIds = new ArrayList<>();
+        List<String> missionIds = new ArrayList<>();
+
+        LostReport lost = lostReport(
+                "lost_demo_calculator_" + shortId(),
+                "Approved Calculator Return",
+                "electronics",
+                "Graphing calculator reported missing from math hallway before an approved pickup workflow.",
+                "Black",
+                "Texas Instruments",
+                "Math Hall",
+                "zone_main_office",
+                "riley.chen@pleasantvalley.edu",
+                "medium",
+                LocalDate.parse(clock.now().substring(0, 10)).toString()
+        );
+        lostReports.save(lost);
+        RecoveryCase recoveryCase = recoveryCaseService.ensureForLostReport(lost);
+
+        FoundItem calculator = foundItem(
+                "found_demo_calculator_" + shortId(),
+                "TI-84 Graphing Calculator",
+                "electronics",
+                "Black graphing calculator turned in after math club.",
+                "Black",
+                "Texas Instruments",
+                "Main Office",
+                "zone_main_office",
+                ItemStatus.FOUND
+        );
+        calculator.setEventHubId("hub_basketball_game");
+        calculator.setPrivateVerificationClues(List.of("PVHS asset sticker on the back", "initials R.C. inside the case"));
+        calculator.setStorageLocation("Main Office pickup drawer C2");
+        calculator.setLinkedLostReportId(lost.getId());
+        foundItems.save(calculator);
+        foundIds.add(calculator.getId());
+
+        Claim claim = claim(
+                "claim_demo_calculator_" + shortId(),
+                calculator.getId(),
+                "Riley Chen",
+                lost.getContactEmail(),
+                "submitted"
+        );
+        claim.setIdentifyingDetails("The back has my PVHS asset sticker and initials R.C. inside the case.");
+        claims.save(claim);
+
+        Claim approved = adminWorkflowService.approveClaim(claim.getId(), admin, Map.of("admin_notes", "Approved demo calculator claim for pickup."));
+        claimIds.add(approved.getId());
+
+        RecoveryMission mission = recoveryCaseService.createMission(recoveryCase.getId(), Map.of(
+                "campus_zone_id", "zone_main_office",
+                "zone_label", "Main Office",
+                "title", "Prepare approved calculator pickup",
+                "recommended_action", "Hold the calculator at the pickup station and verify the Return Pass code.",
+                "priority", "medium",
+                "status", "assigned",
+                "assigned_to", adminEmail,
+                "is_demo", true
+        ), adminEmail);
+        missionIds.add(mission.getId());
+
+        recoveryCaseService.update(recoveryCase.getId(), Map.of(
+                "selected_found_item_id", calculator.getId(),
+                "linked_claim_id", approved.getId(),
+                "status", "claim_in_review",
+                "event_hub_id", "hub_basketball_game",
+                "campus_zone_id", "zone_main_office"
+        ), adminEmail);
+
+        ReturnPassResponse pass = returnPassService.create(
+                approved.getId(),
+                new ReturnPassRequest("Next school day during office hours", "PVHS Main Office pickup station"),
+                admin
+        );
+
+        audit("DEMO_SCENARIO_CREATED", "DemoScenario", "approved_calculator_return", adminEmail, "Created Approved Calculator Return demo scenario.");
+        return new DemoScenarioResponse(
+                "approved_calculator_return",
+                List.of(lost.getId()),
+                List.of(recoveryCase.getId()),
+                missionIds,
+                foundIds,
+                claimIds,
+                Map.of(
+                        "next_step", "Open Pickup Station to verify and redeem the generated Return Pass.",
+                        "return_pass_id", pass.id(),
+                        "pickup_location", pass.pickupLocation(),
+                        "return_pass_status", pass.status()
+                )
         );
     }
 
@@ -395,6 +538,89 @@ public class DemoScenarioService {
         claim.setUpdatedDate(now);
         claim.setIsDemo(true);
         return claim;
+    }
+
+    private AppUser adminUser(String adminEmail) {
+        AppUser admin = new AppUser();
+        admin.setEmail(adminEmail);
+        admin.setRole("admin");
+        admin.setFullName("Demo Admin");
+        return admin;
+    }
+
+    private int deleteDemoReturnPasses() {
+        if (returnPasses == null) {
+            return 0;
+        }
+        List<String> ids = returnPasses.findAll().stream()
+                .filter(pass -> Boolean.TRUE.equals(pass.getIsDemo()))
+                .map(pass -> pass.getId())
+                .toList();
+        ids.forEach(returnPasses::deleteById);
+        return ids.size();
+    }
+
+    private int deleteDemoClaims() {
+        List<String> ids = claims.findAll().stream()
+                .filter(claim -> Boolean.TRUE.equals(claim.getIsDemo()))
+                .map(Claim::getId)
+                .toList();
+        ids.forEach(claims::deleteById);
+        return ids.size();
+    }
+
+    private int deleteDemoFoundItems() {
+        List<String> ids = foundItems.findAll().stream()
+                .filter(item -> Boolean.TRUE.equals(item.getIsDemo()))
+                .map(FoundItem::getId)
+                .toList();
+        ids.forEach(foundItems::deleteById);
+        return ids.size();
+    }
+
+    private int deleteDemoMissions() {
+        if (recoveryMissions == null) {
+            return 0;
+        }
+        List<String> ids = recoveryMissions.findAll().stream()
+                .filter(mission -> Boolean.TRUE.equals(mission.getIsDemo()))
+                .map(RecoveryMission::getId)
+                .toList();
+        ids.forEach(recoveryMissions::deleteById);
+        return ids.size();
+    }
+
+    private int deleteDemoCases() {
+        if (recoveryCases == null) {
+            return 0;
+        }
+        List<String> ids = recoveryCases.findAll().stream()
+                .filter(recoveryCase -> Boolean.TRUE.equals(recoveryCase.getIsDemo()))
+                .map(RecoveryCase::getId)
+                .toList();
+        ids.forEach(recoveryCases::deleteById);
+        return ids.size();
+    }
+
+    private int deleteDemoAlerts() {
+        if (preventionAlerts == null) {
+            return 0;
+        }
+        List<String> ids = preventionAlerts.findAll().stream()
+                .filter(alert -> Boolean.TRUE.equals(alert.getIsDemo()))
+                .map(alert -> alert.getId())
+                .toList();
+        ids.forEach(preventionAlerts::deleteById);
+        return ids.size();
+    }
+
+    private int deleteDemoLostReports() {
+        List<String> ids = lostReports.findAll().stream()
+                .filter(report -> Boolean.TRUE.equals(report.getIsDemo()))
+                .map(LostReport::getId)
+                .toList();
+        ids.forEach(lostReports::deleteById);
+        return ids.size();
     }
 
     private String value(Map<String, Object> data, String key, String fallback) {

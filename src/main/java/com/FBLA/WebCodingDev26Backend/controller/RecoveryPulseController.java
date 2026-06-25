@@ -138,7 +138,7 @@ public class RecoveryPulseController {
     }
 
     private AppUser requireUser(String emailHeader) {
-        String email = normalize(emailHeader);
+        String email = normalize(authorization.resolveEmail(emailHeader));
         if (email.isBlank()) {
             throw new ForbiddenException("Signed-in user is required.");
         }

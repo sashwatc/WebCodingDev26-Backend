@@ -144,6 +144,12 @@ public class WorkflowService {
         if (previousClaim == null && Set.of("approved", "completed").contains(normalize(claim.getStatus()))) {
             throw new BadRequestException("New claims must be submitted before admin approval");
         }
+        if ("completed".equals(normalize(claim.getStatus()))) {
+            String priorStatus = normalize(previousClaim == null ? null : previousClaim.getStatus());
+            if (!"completed".equals(priorStatus) && !"approved".equals(priorStatus)) {
+                throw new BadRequestException("A claim can only be completed after it is approved and the pickup is confirmed");
+            }
+        }
         if ("approved".equals(claim.getStatus())) {
             boolean alreadyApproved = claims.findByFoundItemId(claim.getFoundItemId()).stream()
                     .anyMatch(existingClaim -> !Objects.equals(existingClaim.getId(), claim.getId())

@@ -105,6 +105,7 @@ public class ReturnPassService {
         pass.setExpiresAt(Instant.parse(now).plus(2, ChronoUnit.DAYS).toString());
         pass.setCreatedDate(now);
         pass.setUpdatedDate(now);
+        pass.setIsDemo(Boolean.TRUE.equals(claim.getIsDemo()) || Boolean.TRUE.equals(item.getIsDemo()));
         ReturnPass saved = returnPasses.save(pass);
 
         custodyLedgerService.appendEvent(item.getId(), "pickup_ready", admin.getEmail(), admin.getRole(), pass.getPickupLocation(), "Return Pass issued for approved claim.", null);
@@ -117,8 +118,12 @@ public class ReturnPassService {
 
     public ReturnPassResponse get(String id, String userEmail, DemoAuthorizationService authorizationService) {
         ReturnPass pass = returnPasses.findById(id).orElseThrow(() -> new NotFoundException("Return Pass not found"));
-        String normalized = normalize(userEmail);
-        if (!authorizationService.isAdmin(userEmail) && !normalize(pass.getClaimantEmail()).equals(normalized)) {
+        if (authorizationService.isAdmin(userEmail)) {
+            return ReturnPassResponse.from(pass);
+        }
+        String verifiedEmail = normalize(authorizationService.resolveEmail(userEmail));
+        String claimantEmail = normalize(pass.getClaimantEmail());
+        if (verifiedEmail.isBlank() || !claimantEmail.equals(verifiedEmail)) {
             throw new ForbiddenException("Return Pass access is restricted to the claimant or an admin.");
         }
         return ReturnPassResponse.from(pass);

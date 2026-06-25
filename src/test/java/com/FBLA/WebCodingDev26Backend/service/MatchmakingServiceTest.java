@@ -46,7 +46,7 @@ class MatchmakingServiceTest {
 
         assertThat(matches).hasSize(1);
         assertThat(matches.get(0).getFoundItemId()).isEqualTo("found_002");
-        assertThat(matches.get(0).getSource()).isEqualTo("local");
+        assertThat(matches.get(0).getSource()).isEqualTo("deterministic");
         assertThat(matches.get(0).getConfidence()).isGreaterThanOrEqualTo(90);
         assertThat(matches.get(0).getReasons()).contains("category match", "brand match", "color match");
 
@@ -56,7 +56,7 @@ class MatchmakingServiceTest {
     }
 
     @Test
-    void refreshMatchesForLostReportMergesAiConfidenceAndReasons() {
+    void refreshMatchesForLostReportKeepsDeterministicScoreWhenAiAddsReasons() {
         LostReport report = lostBackpackReport();
         FoundItem backpack = foundBackpack();
 
@@ -70,8 +70,8 @@ class MatchmakingServiceTest {
         List<MatchSuggestion> matches = service().refreshMatchesForLostReport("lost_001");
 
         assertThat(matches).hasSize(1);
-        assertThat(matches.get(0).getSource()).isEqualTo("ai");
-        assertThat(matches.get(0).getConfidence()).isBetween(82, 100);
+        assertThat(matches.get(0).getSource()).isEqualTo("ai_assisted");
+        assertThat(matches.get(0).getConfidence()).isGreaterThanOrEqualTo(90);
         assertThat(matches.get(0).getReasons()).contains("AI matched the backpack details.");
     }
 

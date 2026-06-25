@@ -46,6 +46,39 @@ public class AuthService {
         return repository.save(user);
     }
 
+    /**
+     * Upserts a backend user from a server-verified identity (for example, an
+     * Appwrite account whose JWT was validated by {@code AppwriteAuthService}).
+     * Passwords are never received or stored here; identity and the admin
+     * decision are determined upstream and only mapped onto the backend record.
+     */
+    public AppUser upsertFromVerifiedIdentity(String appwriteUserId, String email, String fullName, boolean admin) {
+        String normalizedEmail = normalize(email);
+        String now = clock.now();
+        AppUser user = repository.findByEmail(normalizedEmail).orElseGet(() -> {
+            AppUser created = new AppUser();
+            created.setId("user_" + UUID.randomUUID().toString().replace("-", "").substring(0, 10));
+            created.setCreatedDate(now);
+            created.setAvatarUrl("");
+            return created;
+        });
+        if (appwriteUserId != null && !appwriteUserId.isBlank()) {
+            user.setAppwriteUserId(appwriteUserId.trim());
+        }
+        String resolvedName = fullName == null ? "" : fullName.trim();
+        if (resolvedName.isBlank()) {
+            resolvedName = user.getFullName() == null || user.getFullName().isBlank()
+                    ? normalizedEmail
+                    : user.getFullName();
+        }
+        user.setFullName(resolvedName);
+        user.setEmail(normalizedEmail);
+        user.setRole(admin ? "admin" : "student");
+        applyNotificationDefaults(user);
+        user.setUpdatedDate(now);
+        return repository.save(user);
+    }
+
     private void applyNotificationDefaults(AppUser user) {
         if (user.getEmailNotificationsEnabled() == null) {
             user.setEmailNotificationsEnabled(true);

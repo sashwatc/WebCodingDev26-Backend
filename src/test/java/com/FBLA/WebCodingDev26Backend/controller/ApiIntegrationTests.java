@@ -31,6 +31,8 @@ import com.FBLA.WebCodingDev26Backend.model.LostReport;
 import com.FBLA.WebCodingDev26Backend.model.MatchSuggestion;
 import com.FBLA.WebCodingDev26Backend.model.Notification;
 import com.FBLA.WebCodingDev26Backend.model.Rating;
+import com.FBLA.WebCodingDev26Backend.repository.ClaimRepository;
+import com.FBLA.WebCodingDev26Backend.service.AiAssistanceService;
 import com.FBLA.WebCodingDev26Backend.service.AuthService;
 import com.FBLA.WebCodingDev26Backend.service.DemoAuthorizationService;
 import com.FBLA.WebCodingDev26Backend.service.FoundItemService;
@@ -75,6 +77,10 @@ class ApiIntegrationTests {
     private MatchmakingService matchmakingService;
     @Mock
     private DemoAuthorizationService authorizationService;
+    @Mock
+    private ClaimRepository claimRepository;
+    @Mock
+    private AiAssistanceService aiAssistanceService;
 
     private MockMvc mockMvc;
 
@@ -85,9 +91,11 @@ class ApiIntegrationTests {
                         new HealthController(healthService),
                         new FoundItemController(foundItemService),
                         new AdminFoundItemController(foundItemService, authorizationService),
-                        new GenericEntityController(genericEntityService),
+                        new GenericEntityController(genericEntityService, authorizationService),
+                        new ClaimController(claimRepository, authorizationService),
                         new MatchmakingController(matchmakingService),
-                        new AuthController(authService),
+                        new AiAssistanceController(aiAssistanceService),
+                        new AuthController(authService, authorizationService),
                         new UploadController(uploadService)
                 )
                 .setControllerAdvice(new GlobalExceptionHandler())
@@ -138,6 +146,8 @@ class ApiIntegrationTests {
         doReturn(List.of(claim("claim_001"))).when(genericEntityService).list("Claim");
         doReturn(List.of(notification("notif_001"))).when(genericEntityService).list("Notification");
         doReturn(List.of(auditLog("audit_001"))).when(genericEntityService).list("AuditLog");
+        when(authorizationService.requireAdmin("avery.patel@pleasantvalley.edu"))
+                .thenReturn(user("user_admin", "Avery Patel", "avery.patel@pleasantvalley.edu", "admin"));
 
         mockMvc.perform(get("/api/items"))
                 .andExpect(status().isOk())
@@ -148,7 +158,8 @@ class ApiIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[?(@.id == 'lost_001')]").exists());
 
-        mockMvc.perform(get("/api/entities/Claim"))
+        mockMvc.perform(get("/api/entities/Claim")
+                        .header("X-Demo-User-Email", "avery.patel@pleasantvalley.edu"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[?(@.id == 'claim_001')]").exists());
 
@@ -261,6 +272,76 @@ class ApiIntegrationTests {
     }
 
     @Test
+    void genericClaimReadAndPrivilegedPatchRequireAdmin() throws Exception {
+        when(authorizationService.requireAdmin(null))
+                .thenThrow(new com.FBLA.WebCodingDev26Backend.exception.ForbiddenException("Admin access is required."));
+
+        mockMvc.perform(get("/api/entities/Claim"))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(patch("/api/entities/Claim/claim_test")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"completed\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void claimantPendingReviewFeedbackDoesNotRequireAdmin() throws Exception {
+        Claim reviewed = claim("claim_review");
+        reviewed.setReviewStatus("pending");
+        when(genericEntityService.update(eq("Claim"), eq("claim_review"), any())).thenReturn(reviewed);
+
+        mockMvc.perform(patch("/api/entities/Claim/claim_review")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"claimant_rating\":5,\"claimant_review\":\"Helpful pickup.\",\"review_status\":\"pending\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.review_status").value("pending"));
+    }
+
+    @Test
+    void claimMineReturnsOnlyResolvedUserClaims() throws Exception {
+        Claim ownClaim = claim("claim_own");
+        ownClaim.setClaimantEmail("jordan.kim@pleasantvalley.edu");
+        when(authorizationService.resolveEmail("jordan.kim@pleasantvalley.edu"))
+                .thenReturn("jordan.kim@pleasantvalley.edu");
+        when(claimRepository.findByClaimantEmail("jordan.kim@pleasantvalley.edu"))
+                .thenReturn(List.of(ownClaim));
+
+        mockMvc.perform(get("/api/claims/mine")
+                        .header("X-Demo-User-Email", "jordan.kim@pleasantvalley.edu"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value("claim_own"))
+                .andExpect(jsonPath("$[0].claimant_email").value("jordan.kim@pleasantvalley.edu"));
+    }
+
+    @Test
+    void aiAssistanceRoutesReturnEditableSuggestions() throws Exception {
+        when(aiAssistanceService.parseSearchQuery(any())).thenReturn(Map.of(
+                "source", "deterministic",
+                "editable", true,
+                "category", "electronics"
+        ));
+        when(aiAssistanceService.suggestFoundItemFields(any())).thenReturn(Map.of(
+                "source", "deterministic",
+                "editable", true,
+                "tags", List.of("airpods")
+        ));
+
+        mockMvc.perform(post("/api/ai-assistance/search")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"query\":\"black earbuds near gym\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.editable").value(true))
+                .andExpect(jsonPath("$.source").value("deterministic"));
+
+        mockMvc.perform(post("/api/ai-assistance/found-item")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\"AirPods case\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tags[0]").value("airpods"));
+    }
+
+    @Test
     void matchmakingRoutesFetchAndRefreshSuggestions() throws Exception {
         MatchSuggestion suggestion = matchSuggestion();
 
@@ -336,6 +417,11 @@ class ApiIntegrationTests {
 
     private void assertGenericEntityCrud(String entityName, String id, Object entity, String patchBody, String patchedField, Object patchedValue) throws Exception {
         Object patched = patchedEntity(entity);
+        boolean isClaim = "Claim".equals(entityName);
+        if (isClaim) {
+            when(authorizationService.requireAdmin("avery.patel@pleasantvalley.edu"))
+                    .thenReturn(user("user_admin", "Avery Patel", "avery.patel@pleasantvalley.edu", "admin"));
+        }
         when(genericEntityService.create(eq(entityName), any())).thenReturn(entity);
         doReturn(List.of(entity)).when(genericEntityService).list(entityName);
         when(genericEntityService.update(eq(entityName), eq(id), any())).thenReturn(patched);
@@ -347,19 +433,26 @@ class ApiIntegrationTests {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(id));
 
-        mockMvc.perform(get("/api/entities/" + entityName))
+        mockMvc.perform(withAdminIfClaim(get("/api/entities/" + entityName), isClaim))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(greaterThanOrEqualTo(1))));
 
-        mockMvc.perform(patch("/api/entities/" + entityName + "/" + id)
+        mockMvc.perform(withAdminIfClaim(patch("/api/entities/" + entityName + "/" + id), isClaim)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(patchBody))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath(patchedField).value(patchedValue));
 
-        mockMvc.perform(delete("/api/entities/" + entityName + "/" + id))
+        mockMvc.perform(withAdminIfClaim(delete("/api/entities/" + entityName + "/" + id), isClaim))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true));
+    }
+
+    private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder withAdminIfClaim(
+            org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder request,
+            boolean isClaim
+    ) {
+        return isClaim ? request.header("X-Demo-User-Email", "avery.patel@pleasantvalley.edu") : request;
     }
 
     private Object patchedEntity(Object entity) {

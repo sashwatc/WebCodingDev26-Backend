@@ -438,6 +438,12 @@ class RecoveryMeshRulesTest {
                 auditLogs,
                 recoveryCaseWorkflow,
                 sentinel,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
                 clock(),
                 new InputSanitizer()
         );
@@ -478,6 +484,136 @@ class RecoveryMeshRulesTest {
         assertThat(claimCaptor.getValue().getIsDemo()).isTrue();
         verify(foundItems, never()).deleteById(any());
         verify(lostReports, never()).deleteById(any());
+    }
+
+    @Test
+    void approvedCalculatorReturnScenarioUsesApprovalAndReturnPassWorkflow() {
+        RecoveryCaseService recoveryCaseWorkflow = org.mockito.Mockito.mock(RecoveryCaseService.class);
+        LossSentinelService sentinel = org.mockito.Mockito.mock(LossSentinelService.class);
+        AdminWorkflowService adminWorkflow = org.mockito.Mockito.mock(AdminWorkflowService.class);
+        ReturnPassService returnPassWorkflow = org.mockito.Mockito.mock(ReturnPassService.class);
+        DemoScenarioService service = new DemoScenarioService(
+                lostReports,
+                foundItems,
+                claims,
+                auditLogs,
+                recoveryCaseWorkflow,
+                sentinel,
+                adminWorkflow,
+                returnPassWorkflow,
+                null,
+                null,
+                null,
+                null,
+                clock(),
+                new InputSanitizer()
+        );
+        RecoveryCase recoveryCase = recoveryCase("case_calculator", "lost_demo_calculator", "open");
+        Claim approved = claim("claim_demo_calculator", "found_demo_calculator", "approved");
+
+        when(lostReports.save(any(LostReport.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(foundItems.save(any(FoundItem.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(claims.save(any(Claim.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(auditLogs.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(recoveryCaseWorkflow.ensureForLostReport(any(LostReport.class))).thenReturn(recoveryCase);
+        when(recoveryCaseWorkflow.update(any(), any(), any())).thenReturn(recoveryCase);
+        when(recoveryCaseWorkflow.createMission(any(), any(), any())).thenReturn(mission("mission_pickup", "case_calculator", "zone_main_office", "Main Office", 60, "medium", "assigned"));
+        when(adminWorkflow.approveClaim(any(), any(), any())).thenReturn(approved);
+        when(returnPassWorkflow.create(any(), any(ReturnPassRequest.class), any())).thenReturn(new com.FBLA.WebCodingDev26Backend.dto.ReturnPassResponse(
+                "pass_demo_calculator",
+                "claim_demo_calculator",
+                "found_demo_calculator",
+                "riley.chen@pleasantvalley.edu",
+                "Next school day",
+                "PVHS Main Office",
+                "active",
+                "123456",
+                "2026-06-24T12:00:00Z",
+                "",
+                "",
+                "2026-06-22T12:00:00Z",
+                "2026-06-22T12:00:00Z"
+        ));
+
+        DemoScenarioResponse response = service.create("approved_calculator_return", Map.of(), "avery.patel@pleasantvalley.edu");
+
+        assertThat(response.scenario()).isEqualTo("approved_calculator_return");
+        assertThat(response.details()).containsEntry("return_pass_id", "pass_demo_calculator");
+        verify(adminWorkflow).approveClaim(any(), any(), any());
+        verify(returnPassWorkflow).create(any(), any(ReturnPassRequest.class), any());
+    }
+
+    @Test
+    void demoCleanupRequiresConfirmationAndDeletesDemoRecordsOnly() {
+        DemoScenarioService service = new DemoScenarioService(
+                lostReports,
+                foundItems,
+                claims,
+                auditLogs,
+                org.mockito.Mockito.mock(RecoveryCaseService.class),
+                org.mockito.Mockito.mock(LossSentinelService.class),
+                null,
+                null,
+                recoveryCases,
+                recoveryMissions,
+                preventionAlerts,
+                returnPasses,
+                clock(),
+                new InputSanitizer()
+        );
+        LostReport demoLost = lost("lost_demo", "zone_gym", "electronics", "2026-06-21");
+        demoLost.setIsDemo(true);
+        LostReport realLost = lost("lost_real", "zone_gym", "electronics", "2026-06-21");
+        FoundItem demoFound = foundItem("found_demo", "FOUND");
+        demoFound.setIsDemo(true);
+        FoundItem realFound = foundItem("found_real", "FOUND");
+        Claim demoClaim = claim("claim_demo", "found_demo", "submitted");
+        demoClaim.setIsDemo(true);
+        Claim realClaim = claim("claim_real", "found_real", "submitted");
+        ReturnPass demoPass = pass("pass_demo", "claim_demo", "found_demo", "active", "123456", "2026-06-24T12:00:00Z");
+        demoPass.setIsDemo(true);
+        ReturnPass realPass = pass("pass_real", "claim_real", "found_real", "active", "654321", "2026-06-24T12:00:00Z");
+        RecoveryCase demoCase = recoveryCase("case_demo", "lost_demo", "open");
+        demoCase.setIsDemo(true);
+        RecoveryCase realCase = recoveryCase("case_real", "lost_real", "open");
+        RecoveryMission demoMission = mission("mission_demo", "case_demo", "zone_gym", "Gym", 80, "high", "open");
+        demoMission.setIsDemo(true);
+        RecoveryMission realMission = mission("mission_real", "case_real", "zone_gym", "Gym", 80, "high", "open");
+        PreventionAlert demoAlert = new PreventionAlert();
+        demoAlert.setId("alert_demo");
+        demoAlert.setIsDemo(true);
+        PreventionAlert realAlert = new PreventionAlert();
+        realAlert.setId("alert_real");
+
+        assertThatThrownBy(() -> service.cleanup(Map.of("confirmation", "delete"), "avery.patel@pleasantvalley.edu"))
+                .isInstanceOf(BadRequestException.class);
+
+        when(returnPasses.findAll()).thenReturn(List.of(demoPass, realPass));
+        when(claims.findAll()).thenReturn(List.of(demoClaim, realClaim));
+        when(foundItems.findAll()).thenReturn(List.of(demoFound, realFound));
+        when(recoveryMissions.findAll()).thenReturn(List.of(demoMission, realMission));
+        when(recoveryCases.findAll()).thenReturn(List.of(demoCase, realCase));
+        when(preventionAlerts.findAll()).thenReturn(List.of(demoAlert, realAlert));
+        when(lostReports.findAll()).thenReturn(List.of(demoLost, realLost));
+        when(auditLogs.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Map<String, Object> result = service.cleanup(Map.of("confirmation", "DELETE DEMO DATA"), "avery.patel@pleasantvalley.edu");
+
+        assertThat(result).containsEntry("success", true);
+        verify(returnPasses).deleteById("pass_demo");
+        verify(returnPasses, never()).deleteById("pass_real");
+        verify(claims).deleteById("claim_demo");
+        verify(claims, never()).deleteById("claim_real");
+        verify(foundItems).deleteById("found_demo");
+        verify(foundItems, never()).deleteById("found_real");
+        verify(recoveryMissions).deleteById("mission_demo");
+        verify(recoveryMissions, never()).deleteById("mission_real");
+        verify(recoveryCases).deleteById("case_demo");
+        verify(recoveryCases, never()).deleteById("case_real");
+        verify(preventionAlerts).deleteById("alert_demo");
+        verify(preventionAlerts, never()).deleteById("alert_real");
+        verify(lostReports).deleteById("lost_demo");
+        verify(lostReports, never()).deleteById("lost_real");
     }
 
     @Test

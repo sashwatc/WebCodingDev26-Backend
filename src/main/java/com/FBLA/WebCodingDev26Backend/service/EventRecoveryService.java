@@ -1,12 +1,14 @@
 package com.FBLA.WebCodingDev26Backend.service;
 
 import com.FBLA.WebCodingDev26Backend.dto.PublicFoundItemResponse;
+import com.FBLA.WebCodingDev26Backend.dto.PublicEventHubResponse;
 import com.FBLA.WebCodingDev26Backend.exception.NotFoundException;
 import com.FBLA.WebCodingDev26Backend.mapper.PatchMapper;
 import com.FBLA.WebCodingDev26Backend.model.AppUser;
 import com.FBLA.WebCodingDev26Backend.model.CampusZone;
 import com.FBLA.WebCodingDev26Backend.model.EventRecoveryHub;
 import com.FBLA.WebCodingDev26Backend.model.FoundItem;
+import com.FBLA.WebCodingDev26Backend.model.ItemStatus;
 import com.FBLA.WebCodingDev26Backend.repository.CampusZoneRepository;
 import com.FBLA.WebCodingDev26Backend.repository.EventRecoveryHubRepository;
 import com.FBLA.WebCodingDev26Backend.repository.FoundItemRepository;
@@ -45,11 +47,17 @@ public class EventRecoveryService {
         return zones.findAll();
     }
 
-    public List<EventRecoveryHub> listPublicHubs() {
-        return hubs.findByPublicEnabledTrue();
+    public List<PublicEventHubResponse> listPublicHubs() {
+        return hubs.findByPublicEnabledTrue().stream()
+                .map(PublicEventHubResponse::from)
+                .toList();
     }
 
-    public EventRecoveryHub getPublicHub(String id) {
+    public PublicEventHubResponse getPublicHub(String id) {
+        return PublicEventHubResponse.from(getPublicHubRecord(id));
+    }
+
+    private EventRecoveryHub getPublicHubRecord(String id) {
         EventRecoveryHub hub = hubs.findById(id).orElseThrow(() -> new NotFoundException("Event hub not found"));
         if (!Boolean.TRUE.equals(hub.getPublicEnabled())) {
             throw new NotFoundException("Event hub not found");
@@ -58,22 +66,23 @@ public class EventRecoveryService {
     }
 
     public Map<String, Object> displayFeed(String id) {
-        EventRecoveryHub hub = getPublicHub(id);
+        EventRecoveryHub hub = getPublicHubRecord(id);
         if (!Boolean.TRUE.equals(hub.getDisplayEnabled())) {
             throw new NotFoundException("Display feed not available");
         }
 
         List<PublicFoundItemResponse> publicItems = foundItems.findByEventHubId(id).stream()
                 .filter(foundItemService::isPubliclyVisible)
+                .filter(item -> ItemStatus.FOUND.equals(ItemStatus.canonical(item.getStatus())))
                 .map(PublicFoundItemResponse::from)
                 .toList();
         List<CampusZone> publicZones = zones.findAllById(hub.getCampusZoneIds());
 
         Map<String, Object> feed = new LinkedHashMap<>();
-        feed.put("event_hub", hub);
+        feed.put("event_hub", PublicEventHubResponse.from(hub));
         feed.put("zones", publicZones);
         feed.put("found_items", publicItems);
-        feed.put("notice", "Demo integration-ready event workflow. This does not claim connection to a live PVHS calendar or school display system.");
+        feed.put("notice", "Grounded event recovery demo. This is manually configured context and does not claim live PVHS calendar, GPS, or display-system integration.");
         return feed;
     }
 

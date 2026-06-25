@@ -207,14 +207,13 @@ public class MatchmakingService {
         if (aiResult == null) {
             suggestion.setConfidence(scored.score());
             suggestion.setReasons(scored.reasons());
-            suggestion.setSource("local");
+            suggestion.setSource("deterministic");
             return suggestion;
         }
 
-        int aiConfidence = aiResult.confidence() == null ? scored.score() : aiResult.confidence();
-        suggestion.setConfidence(clamp(Math.round((aiConfidence * 0.7f) + (scored.score() * 0.3f))));
+        suggestion.setConfidence(scored.score());
         suggestion.setReasons(mergedReasons(aiResult.reasons(), scored.reasons()));
-        suggestion.setSource("ai");
+        suggestion.setSource("ai_assisted");
         return suggestion;
     }
 

@@ -14,6 +14,7 @@ public class AppUser {
     @Indexed(unique = true)
     private String email;
     private String role;
+    private String appwriteUserId;
     private String avatarUrl;
     private String phoneNumber;
     private Boolean emailNotificationsEnabled = true;
@@ -32,6 +33,8 @@ public class AppUser {
     public void setEmail(String email) { this.email = email; }
     public String getRole() { return role; }
     public void setRole(String role) { this.role = role; }
+    public String getAppwriteUserId() { return appwriteUserId; }
+    public void setAppwriteUserId(String appwriteUserId) { this.appwriteUserId = appwriteUserId; }
     public String getAvatarUrl() { return avatarUrl; }
     public void setAvatarUrl(String avatarUrl) { this.avatarUrl = avatarUrl; }
     public String getPhoneNumber() { return phoneNumber; }

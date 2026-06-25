@@ -1,5 +1,6 @@
 package com.FBLA.WebCodingDev26Backend.controller;
 
+import com.FBLA.WebCodingDev26Backend.dto.PublicEventHubResponse;
 import com.FBLA.WebCodingDev26Backend.model.AppUser;
 import com.FBLA.WebCodingDev26Backend.model.CampusZone;
 import com.FBLA.WebCodingDev26Backend.model.EventRecoveryHub;
@@ -31,12 +32,12 @@ public class EventRecoveryController {
     }
 
     @GetMapping("/api/event-hubs")
-    public List<EventRecoveryHub> hubs() {
+    public List<PublicEventHubResponse> hubs() {
         return eventRecoveryService.listPublicHubs();
     }
 
     @GetMapping("/api/event-hubs/{id}")
-    public EventRecoveryHub hub(@PathVariable String id) {
+    public PublicEventHubResponse hub(@PathVariable String id) {
         return eventRecoveryService.getPublicHub(id);
     }
 

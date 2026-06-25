@@ -32,4 +32,13 @@ public class DemoScenarioController {
         AppUser admin = authorizationService.requireAdmin(userEmail);
         return scenarios.create(scenario, data, admin.getEmail());
     }
+
+    @PostMapping("/cleanup")
+    public Map<String, Object> cleanup(
+            @RequestBody(required = false) Map<String, Object> data,
+            @RequestHeader(value = "X-Demo-User-Email", required = false) String userEmail
+    ) {
+        AppUser admin = authorizationService.requireAdmin(userEmail);
+        return scenarios.cleanup(data, admin.getEmail());
+    }
 }
