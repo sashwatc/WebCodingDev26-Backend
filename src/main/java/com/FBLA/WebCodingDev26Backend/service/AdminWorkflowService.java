@@ -148,11 +148,22 @@ public class AdminWorkflowService {
         return status.isBlank() || List.of("submitted", "pending_review", "under_review", "need_more_info").contains(status);
     }
 
+    public Claim requestMoreInfo(String claimId, AppUser admin, Map<String, Object> data) {
+        Claim claim = claims.findById(claimId).orElseThrow(() -> new NotFoundException("Claim not found"));
+        String now = clock.now();
+        claim.setStatus("need_more_info");
+        claim.setReviewedBy(admin.getEmail());
+        claim.setReviewedAt(now);
+        claim.setAdminNotes(noteFrom(data, "Admin requested additional information."));
+        claim.setUpdatedDate(now);
+        return claims.save(claim);
+    }
+
     private String noteFrom(Map<String, Object> data, String fallback) {
         if (data == null) {
             return fallback;
         }
-        Object value = data.getOrDefault("admin_notes", data.get("adminNotes"));
+        Object value = data.getOrDefault("message", data.getOrDefault("admin_notes", data.get("adminNotes")));
         String sanitized = sanitizer.sanitizeText(value == null ? "" : String.valueOf(value));
         return sanitized.isBlank() ? fallback : sanitized;
     }

@@ -78,6 +78,16 @@ public class AdminDashboardController {
         return workflow.denyClaim(id, admin, data);
     }
 
+    @PostMapping("/claims/{id}/request-more-info")
+    public Claim requestMoreInfo(
+            @PathVariable String id,
+            @RequestHeader(value = "X-Demo-User-Email", required = false) String userEmail,
+            @RequestBody(required = false) Map<String, Object> data
+    ) {
+        AppUser admin = authorizationService.requireAdmin(userEmail);
+        return workflow.requestMoreInfo(id, admin, data);
+    }
+
     @PostMapping("/items/{id}/archive")
     public FoundItem archiveItem(
             @PathVariable String id,

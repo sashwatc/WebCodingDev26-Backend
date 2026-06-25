@@ -42,9 +42,22 @@ public class ProofVaultService {
     }
 
     public EvidenceReviewResponse getEvidenceReview(String claimId) {
+        return getEvidenceReview(claimId, true);
+    }
+
+    public EvidenceReviewResponse getEvidenceReview(String claimId, boolean includePrivateClues) {
         Claim claim = claims.findById(claimId).orElseThrow(() -> new NotFoundException("Claim not found"));
         FoundItem item = foundItems.findById(claim.getFoundItemId()).orElseThrow(() -> new NotFoundException("Found item not found"));
-        return response(claim, item);
+        EvidenceReviewResponse full = response(claim, item);
+        if (!includePrivateClues) {
+            return new EvidenceReviewResponse(
+                    full.claimId(), full.foundItemId(), null,
+                    full.evidenceChecklist(), full.privateEvidenceResponses(),
+                    full.identifyingDetails(), full.proofPhotoUrl(),
+                    full.verificationScore(), full.verificationFlags(), full.verificationSummary()
+            );
+        }
+        return full;
     }
 
     public EvidenceReviewResponse reviewEvidence(String claimId, EvidenceReviewRequest request) {

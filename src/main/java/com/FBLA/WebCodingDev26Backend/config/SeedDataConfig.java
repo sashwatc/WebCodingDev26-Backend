@@ -152,6 +152,8 @@ public class SeedDataConfig {
                 users.save(user("user_001", "Jordan Kim", "jordan.kim@pleasantvalley.edu", "student"));
                 users.save(user("user_002", "Avery Patel", "avery.patel@pleasantvalley.edu", "admin"));
                 users.save(user("user_003", "Riley Chen", "riley.chen@pleasantvalley.edu", "student"));
+                users.save(user("user_staff_demo", "Demo Staff", "staff.demo@pleasantvalley.edu", "staff"));
+                users.save(user("user_student_demo", "Demo Student", "student.demo@pleasantvalley.edu", "student"));
             } catch (DataAccessException exception) {
                 LOGGER.warn("Skipping seed data because MongoDB is unavailable: {}", exception.getMessage());
             }

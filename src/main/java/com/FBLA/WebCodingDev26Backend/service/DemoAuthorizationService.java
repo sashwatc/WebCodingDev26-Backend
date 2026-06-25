@@ -25,6 +25,9 @@ public class DemoAuthorizationService {
 
         AppUser user = users.findByEmail(email)
                 .orElseThrow(() -> new ForbiddenException("Admin access is required."));
+        if (user.getRole() == null || user.getRole().isBlank()) {
+            user.setRole("student");
+        }
         if (!"admin".equalsIgnoreCase(user.getRole()) && !email.equals(adminEmail)) {
             throw new ForbiddenException("Admin access is required.");
         }
