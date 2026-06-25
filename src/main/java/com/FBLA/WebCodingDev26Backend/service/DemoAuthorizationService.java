@@ -126,11 +126,16 @@ public class DemoAuthorizationService {
             return Resolved.none();
         }
         return users.findByEmail(email)
-                .map(user -> new Resolved(
-                        user,
-                        "admin".equalsIgnoreCase(user.getRole()) || email.equals(adminEmail),
-                        user.getEmail(),
-                        false))
+                .map(user -> {
+                    if (user.getRole() == null || user.getRole().isBlank()) {
+                        user.setRole("student");
+                    }
+                    return new Resolved(
+                            user,
+                            "admin".equalsIgnoreCase(user.getRole()) || email.equals(adminEmail),
+                            user.getEmail(),
+                            false);
+                })
                 .orElseGet(Resolved::none);
     }
 

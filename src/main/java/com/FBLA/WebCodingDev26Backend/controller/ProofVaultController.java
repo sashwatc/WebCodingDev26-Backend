@@ -3,6 +3,7 @@ package com.FBLA.WebCodingDev26Backend.controller;
 import com.FBLA.WebCodingDev26Backend.dto.EvidenceReviewRequest;
 import com.FBLA.WebCodingDev26Backend.dto.EvidenceReviewResponse;
 import com.FBLA.WebCodingDev26Backend.dto.ProofVaultResponse;
+import com.FBLA.WebCodingDev26Backend.service.AuthService;
 import com.FBLA.WebCodingDev26Backend.service.DemoAuthorizationService;
 import com.FBLA.WebCodingDev26Backend.service.ProofVaultService;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,10 +17,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class ProofVaultController {
     private final ProofVaultService proofVaultService;
     private final DemoAuthorizationService authorizationService;
+    private final AuthService authService;
 
-    public ProofVaultController(ProofVaultService proofVaultService, DemoAuthorizationService authorizationService) {
+    public ProofVaultController(ProofVaultService proofVaultService, DemoAuthorizationService authorizationService, AuthService authService) {
         this.proofVaultService = proofVaultService;
         this.authorizationService = authorizationService;
+        this.authService = authService;
     }
 
     @GetMapping("/api/items/{id}/proof-vault")
@@ -30,8 +33,9 @@ public class ProofVaultController {
 
     @GetMapping("/api/claims/{claimId}/evidence-review")
     public EvidenceReviewResponse getEvidenceReview(@PathVariable String claimId, @RequestHeader(value = "X-Demo-User-Email", required = false) String userEmail) {
-        authorizationService.requireAdmin(userEmail);
-        return proofVaultService.getEvidenceReview(claimId);
+        boolean privileged = authorizationService.isAdmin(userEmail)
+                || authService.findByEmail(userEmail).map(u -> "staff".equalsIgnoreCase(u.getRole())).orElse(false);
+        return proofVaultService.getEvidenceReview(claimId, privileged);
     }
 
     @PostMapping("/api/claims/{claimId}/evidence-review")

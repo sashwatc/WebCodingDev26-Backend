@@ -40,7 +40,11 @@ public class AuthService {
         });
         user.setFullName(request.getFullName().trim());
         user.setEmail(normalizedEmail);
-        user.setRole(normalizedEmail.equals(adminEmail) ? "admin" : "student");
+        if (normalizedEmail.equals(adminEmail)) {
+            user.setRole("admin");
+        } else if (user.getRole() == null || user.getRole().isBlank()) {
+            user.setRole("student");
+        }
         applyNotificationDefaults(user);
         user.setUpdatedDate(now);
         return repository.save(user);

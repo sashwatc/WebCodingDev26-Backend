@@ -54,7 +54,7 @@ class SeedDataConfigTest {
         verify(claims, times(4)).save(any(Claim.class));
         verify(notifications, times(3)).save(any(Notification.class));
         verify(auditLogs).save(any(AuditLog.class));
-        verify(users, times(3)).save(any(AppUser.class));
+        verify(users, times(5)).save(any(AppUser.class));
     }
 
     @Test
