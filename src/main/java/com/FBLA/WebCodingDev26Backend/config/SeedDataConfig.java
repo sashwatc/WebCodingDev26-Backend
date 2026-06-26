@@ -329,12 +329,54 @@ public class SeedDataConfig {
         watch.setFinderEmail("stagecrew@pleasantvalley.edu");
         watch.setFinderRole("student");
 
+        FoundItem lunchBag = foundItem("found_lunch_bag_floral", "Navy Floral Lunch Bag", "food_containers", "Navy insulated lunch bag with a white floral pattern found after lunch.", "Navy", "Bentgo", "Cafeteria", "2026-03-12", "12:55", ItemStatus.CLAIM_PENDING, "FB-2026-LB33");
+        lunchBag.setCampusZoneId("zone_cafeteria");
+        lunchBag.setTags(List.of("lunch bag", "navy", "floral", "cafeteria"));
+        lunchBag.setPhotoUrls(List.of("/items/floral-lunch-bag.png"));
+        lunchBag.setPrivateVerificationClues(List.of("inside name patch", "small strawberry keychain on zipper"));
+        lunchBag.setStorageLocation("Main Office food-safe shelf");
+        lunchBag.setFinderName("Ms. Greene");
+        lunchBag.setFinderEmail("ms.greene@pleasantvalley.edu");
+        lunchBag.setFinderRole("staff");
+
+        FoundItem debateFolder = foundItem("found_debate_folder", "Green Debate Folder", "books_stationery", "Green plastic folder with loose debate notes found near the auditorium doors.", "Green", "", "Auditorium", "2026-03-13", "16:10", ItemStatus.CLAIM_PENDING, "FB-2026-DF41");
+        debateFolder.setCampusZoneId("zone_auditorium");
+        debateFolder.setTags(List.of("folder", "debate", "green", "auditorium"));
+        debateFolder.setPhotoUrls(List.of("/items/green-folder.png"));
+        debateFolder.setPrivateVerificationClues(List.of("handwritten tournament schedule on the inside pocket", "orange sticky note on first page"));
+        debateFolder.setStorageLocation("Main Office document tray");
+
+        FoundItem soccerCleats = foundItem("found_soccer_cleats", "Black Adidas Soccer Cleats", "sports_equipment", "Pair of black Adidas soccer cleats in a drawstring bag.", "Black", "Adidas", "Bus Loop", "2026-03-12", "15:45", ItemStatus.FOUND, "FB-2026-SOC18");
+        soccerCleats.setCampusZoneId("zone_bus_loop");
+        soccerCleats.setTags(List.of("soccer", "cleats", "black", "bus loop"));
+        soccerCleats.setPhotoUrls(List.of("/items/soccer-cleats.png"));
+        soccerCleats.setPrivateVerificationClues(List.of("number written inside both heels", "one orange lace tip"));
+        soccerCleats.setStorageLocation("Athletics Office equipment shelf");
+
+        FoundItem pearlEarring = foundItem("found_pearl_earring", "Single Pearl Earring", "jewelry", "Single pearl-style stud earring turned in after the spring choir concert.", "White", "", "Auditorium", "2026-03-11", "21:05", ItemStatus.CLAIM_PENDING, "FB-2026-JWL09");
+        pearlEarring.setCampusZoneId("zone_auditorium");
+        pearlEarring.setTags(List.of("earring", "pearl", "jewelry", "auditorium"));
+        pearlEarring.setPhotoUrls(List.of("/items/pearl-earring.png"));
+        pearlEarring.setPrivateVerificationClues(List.of("gold-toned back", "matching earring has a tiny flat spot"));
+        pearlEarring.setStorageLocation("Main Office small-items envelope");
+
+        FoundItem mouthpiece = foundItem("found_clarinet_mouthpiece", "Clarinet Mouthpiece Case", "musical_instruments", "Black clarinet mouthpiece case found outside the band room.", "Black", "Vandoren", "Fine Arts Hallway", "2026-03-10", "14:20", ItemStatus.FOUND, "FB-2026-MUS16");
+        mouthpiece.setTags(List.of("clarinet", "mouthpiece", "band", "fine arts"));
+        mouthpiece.setPhotoUrls(List.of("/items/clarinet-mouthpiece.png"));
+        mouthpiece.setPrivateVerificationClues(List.of("blue tape on the side", "reed strength written on label"));
+        mouthpiece.setStorageLocation("Fine Arts Office lost-and-found drawer");
+
         saveSeeded(foundItems, charger);
         saveSeeded(foundItems, textbook);
         saveSeeded(foundItems, kneepads);
         saveSeeded(foundItems, pencilCase);
         saveSeeded(foundItems, sunglasses);
         saveSeeded(foundItems, watch);
+        saveSeeded(foundItems, lunchBag);
+        saveSeeded(foundItems, debateFolder);
+        saveSeeded(foundItems, soccerCleats);
+        saveSeeded(foundItems, pearlEarring);
+        saveSeeded(foundItems, mouthpiece);
 
         LostReport chargerReport = lostReport("lost_usbc_charger", "Lost white USB-C charger", "electronics", "White USB-C charger and cable left near the cafeteria charging rail.", "White", "Apple", "Cafeteria", "2026-03-16", "sophia.nguyen@pleasantvalley.edu");
         chargerReport.setContactName("Sophia Nguyen");
@@ -357,21 +399,114 @@ public class SeedDataConfig {
         sunglassesReport.setMatchedItems(List.of(match("found_rayban_sunglasses", "Black Sunglasses", 86)));
         saveSeeded(lostReports, sunglassesReport);
 
+        LostReport lunchBagReport = lostReport("lost_lunch_bag_sophia", "Lost navy floral lunch bag", "food_containers", "Navy lunch bag with a white floral print and zipper charm.", "Navy", "Bentgo", "Cafeteria", "2026-03-12", "sophia.nguyen@pleasantvalley.edu");
+        lunchBagReport.setContactName("Sophia Nguyen");
+        lunchBagReport.setCampusZoneId("zone_cafeteria");
+        lunchBagReport.setTimeLost("12:30");
+        lunchBagReport.setMatchedItems(List.of(match("found_lunch_bag_floral", "Navy Floral Lunch Bag", 91)));
+        saveSeeded(lostReports, lunchBagReport);
+
+        LostReport debateFolderReport = lostReport("lost_debate_folder", "Lost green debate folder", "books_stationery", "Green debate folder with practice notes from tournament prep.", "Green", "", "Auditorium", "2026-03-13", "emma.wilson@pleasantvalley.edu");
+        debateFolderReport.setContactName("Emma Wilson");
+        debateFolderReport.setCampusZoneId("zone_auditorium");
+        debateFolderReport.setUrgency("high");
+        debateFolderReport.setTimeLost("15:55");
+        debateFolderReport.setMatchedItems(List.of(match("found_debate_folder", "Green Debate Folder", 89)));
+        saveSeeded(lostReports, debateFolderReport);
+
+        LostReport soccerCleatsReport = lostReport("lost_soccer_cleats", "Missing black soccer cleats", "sports_equipment", "Black Adidas soccer cleats left after away-game bus unloading.", "Black", "Adidas", "Bus Loop", "2026-03-12", "marcus.johnson@pleasantvalley.edu");
+        soccerCleatsReport.setContactName("Marcus Johnson");
+        soccerCleatsReport.setCampusZoneId("zone_bus_loop");
+        soccerCleatsReport.setTimeLost("15:30");
+        soccerCleatsReport.setMatchedItems(List.of(match("found_soccer_cleats", "Black Adidas Soccer Cleats", 84)));
+        saveSeeded(lostReports, soccerCleatsReport);
+
+        LostReport earringReport = lostReport("lost_pearl_earring", "Lost pearl earring", "jewelry", "One pearl-style stud earring missing after choir concert.", "White", "", "Auditorium", "2026-03-11", "hannah.lee@pleasantvalley.edu");
+        earringReport.setContactName("Hannah Lee");
+        earringReport.setCampusZoneId("zone_auditorium");
+        earringReport.setTimeLost("20:50");
+        earringReport.setMatchedItems(List.of(match("found_pearl_earring", "Single Pearl Earring", 82)));
+        saveSeeded(lostReports, earringReport);
+
+        LostReport mouthpieceReport = lostReport("lost_clarinet_mouthpiece", "Lost clarinet mouthpiece case", "musical_instruments", "Black Vandoren mouthpiece case misplaced after band rehearsal.", "Black", "Vandoren", "Fine Arts Hallway", "2026-03-10", "noah.anderson@pleasantvalley.edu");
+        mouthpieceReport.setContactName("Noah Anderson");
+        mouthpieceReport.setTimeLost("14:05");
+        mouthpieceReport.setMatchedItems(List.of(match("found_clarinet_mouthpiece", "Clarinet Mouthpiece Case", 86)));
+        saveSeeded(lostReports, mouthpieceReport);
+
+        LostReport rainJacketReport = lostReport("lost_black_rain_jacket", "Missing black rain jacket", "clothing", "Black lightweight rain jacket last seen by the bus loop.", "Black", "Columbia", "Bus Loop", "2026-03-15", "olivia.brown@pleasantvalley.edu");
+        rainJacketReport.setContactName("Olivia Brown");
+        rainJacketReport.setCampusZoneId("zone_bus_loop");
+        rainJacketReport.setTimeLost("15:25");
+        rainJacketReport.setExtraNotes("No matching found item yet; student checked advisory and locker.");
+        saveSeeded(lostReports, rainJacketReport);
+
         Claim textbookClaim = claim("claim_textbook_needs_info", "found_ap_biology_textbook", "Jordan Kim", "jordan.kim@pleasantvalley.edu", "need_more_info");
+        textbookClaim.setFoundItemTitle("AP Biology Textbook");
         textbookClaim.setAdminNotes("Please confirm the library barcode or teacher name written inside the cover.");
         textbookClaim.setClaimReason("This looks like my AP Biology book from fourth period study hall.");
         textbookClaim.setIdentifyingDetails("The first page should have my last name and a sticky note from unit 7.");
         saveSeeded(claims, textbookClaim);
 
         Claim sunglassesClaim = claim("claim_sunglasses_rejected", "found_rayban_sunglasses", "Mia Rodriguez", "mia.rodriguez@pleasantvalley.edu", "rejected");
+        sunglassesClaim.setFoundItemTitle("Black Sunglasses");
         sunglassesClaim.setAdminNotes("Claim details did not match the case and frame description.");
         sunglassesClaim.setClaimReason("I lost black sunglasses after school near the bus loop.");
         sunglassesClaim.setIdentifyingDetails("Mine did not have a case, so these may not be mine.");
         saveSeeded(claims, sunglassesClaim);
 
+        Claim lunchReview = claim("claim_lunch_bag_review", "found_lunch_bag_floral", "Sophia Nguyen", "sophia.nguyen@pleasantvalley.edu", "pending_review");
+        lunchReview.setFoundItemTitle("Navy Floral Lunch Bag");
+        lunchReview.setClaimReason("I left my lunch bag on the cafeteria table after fifth lunch.");
+        lunchReview.setIdentifyingDetails("It has my name patch inside and a strawberry charm on the zipper.");
+        lunchReview.setEvidenceChecklist(List.of("name patch", "zipper charm", "last known cafeteria table"));
+        lunchReview.setPrivateEvidenceResponses(java.util.Map.of("name_patch", "Sophia name patch", "zipper_charm", "strawberry charm"));
+        lunchReview.setVerificationScore(91);
+        lunchReview.setVerificationFlags(List.of("specific hidden detail", "same lunch period"));
+        lunchReview.setVerificationSummary("Claim matches hidden intake details and the reported cafeteria time.");
+        saveSeeded(claims, lunchReview);
+
+        Claim debateNeedsInfo = claim("claim_debate_more_info", "found_debate_folder", "Emma Wilson", "emma.wilson@pleasantvalley.edu", "need_more_info");
+        debateNeedsInfo.setFoundItemTitle("Green Debate Folder");
+        debateNeedsInfo.setClaimReason("This should be my folder from debate practice.");
+        debateNeedsInfo.setIdentifyingDetails("It has my tournament schedule inside.");
+        debateNeedsInfo.setAdminNotes("Ask claimant to identify the sticky note color before approval.");
+        debateNeedsInfo.setReviewedBy("avery.patel@pleasantvalley.edu");
+        debateNeedsInfo.setReviewedAt("2026-03-14T09:20:00Z");
+        debateNeedsInfo.setEvidenceChecklist(List.of("inside pocket contents", "sticky note color"));
+        debateNeedsInfo.setVerificationScore(72);
+        debateNeedsInfo.setVerificationFlags(List.of("partial detail match", "needs one more private detail"));
+        debateNeedsInfo.setVerificationSummary("The folder details overlap, but one private verification clue is still missing.");
+        saveSeeded(claims, debateNeedsInfo);
+
+        Claim earringReview = claim("claim_pearl_earring_review", "found_pearl_earring", "Hannah Lee", "hannah.lee@pleasantvalley.edu", "pending_review");
+        earringReview.setFoundItemTitle("Single Pearl Earring");
+        earringReview.setClaimReason("I lost one earring after choir concert cleanup.");
+        earringReview.setIdentifyingDetails("The backing is gold-toned, and the matching earring has a tiny flat spot.");
+        earringReview.setEvidenceChecklist(List.of("matching item", "backing color", "concert location"));
+        earringReview.setVerificationScore(86);
+        earringReview.setVerificationFlags(List.of("specific matching-pair detail"));
+        earringReview.setVerificationSummary("Claim gives a specific matching-pair detail suitable for staff review.");
+        saveSeeded(claims, earringReview);
+
+        Claim soccerRejected = claim("claim_soccer_cleats_rejected", "found_soccer_cleats", "Tyler Reed", "tyler.reed@pleasantvalley.edu", "rejected");
+        soccerRejected.setFoundItemTitle("Black Adidas Soccer Cleats");
+        soccerRejected.setClaimReason("I lost black cleats near the bus loop.");
+        soccerRejected.setIdentifyingDetails("They are size 9 with blue laces.");
+        soccerRejected.setAdminNotes("Rejected because private details did not match the sealed intake clues.");
+        soccerRejected.setReviewedBy("avery.patel@pleasantvalley.edu");
+        soccerRejected.setReviewedAt("2026-03-13T10:15:00Z");
+        soccerRejected.setRiskScore(35);
+        soccerRejected.setRiskFlags(List.of("details conflict with intake clues", "demo record"));
+        saveSeeded(claims, soccerRejected);
+
         saveIfMissing(notifications, notification("notif_charger_match", "sophia.nguyen@pleasantvalley.edu", "Possible charger match", "A white USB-C charger may match your lost report.", "strong_item_match", "/UserDashboard", "found_usbc_charger"));
         saveIfMissing(notifications, notification("notif_textbook_info", "jordan.kim@pleasantvalley.edu", "More info needed", "Staff requested one more detail for your AP Biology textbook claim.", "claim_more_info", "/claims/claim_textbook_needs_info", "found_ap_biology_textbook"));
         saveIfMissing(notifications, notification("notif_sunglasses_reviewed", "mia.rodriguez@pleasantvalley.edu", "Claim reviewed", "Staff reviewed the sunglasses claim and left a decision.", "claim_reviewed", "/claims/claim_sunglasses_rejected", "found_rayban_sunglasses"));
+        saveIfMissing(notifications, notification("notif_lunch_review", "sophia.nguyen@pleasantvalley.edu", "Claim under review", "Staff are reviewing your lunch bag claim against private intake details.", "claim_review", "/claim?item=found_lunch_bag_floral", "found_lunch_bag_floral"));
+        saveIfMissing(notifications, notification("notif_debate_more_info", "emma.wilson@pleasantvalley.edu", "More info needed", "Staff need one more private detail before approving the debate folder claim.", "claim_more_info_requested", "/claim?item=found_debate_folder", "found_debate_folder"));
+        saveIfMissing(notifications, notification("notif_clarinet_match", "noah.anderson@pleasantvalley.edu", "Possible match found", "A clarinet mouthpiece case may match your lost report.", "strong_item_match", "/browse", "found_clarinet_mouthpiece"));
+        saveIfMissing(notifications, notification("notif_earring_review", "hannah.lee@pleasantvalley.edu", "Jewelry claim received", "Your earring claim is queued for staff review.", "claim_review", "/claim?item=found_pearl_earring", "found_pearl_earring"));
     }
 
     private void seedLostReports(LostReportRepository lostReports) {
