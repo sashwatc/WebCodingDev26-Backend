@@ -7,6 +7,7 @@ import com.FBLA.WebCodingDev26Backend.repository.CampusZoneRepository;
 import com.FBLA.WebCodingDev26Backend.repository.ClaimRepository;
 import com.FBLA.WebCodingDev26Backend.repository.CustodyEventRepository;
 import com.FBLA.WebCodingDev26Backend.repository.CaseMessageRepository;
+import com.FBLA.WebCodingDev26Backend.repository.EventRecoveryHubRepository;
 import com.FBLA.WebCodingDev26Backend.repository.FoundItemRepository;
 import com.FBLA.WebCodingDev26Backend.repository.LostReportRepository;
 import com.FBLA.WebCodingDev26Backend.repository.NotificationDeliveryRepository;
@@ -52,6 +53,8 @@ class WebCodingDev26BackendApplicationTests {
 	private AppUserRepository users;
 	@MockitoBean
 	private CampusZoneRepository campusZones;
+	@MockitoBean
+	private EventRecoveryHubRepository eventHubs;
 	@MockitoBean
 	private AssetRegistryRecordRepository assetRecords;
 	@MockitoBean
