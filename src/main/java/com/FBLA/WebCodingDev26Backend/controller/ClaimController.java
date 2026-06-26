@@ -58,6 +58,25 @@ public class ClaimController {
         return claims.findByClaimantEmail(verifiedEmail);
     }
 
+    @PostMapping("/{id}/cancel")
+    public Claim cancel(@PathVariable String id, @RequestHeader(value = "X-Demo-User-Email", required = false) String userEmail) {
+        String verifiedEmail = authorizationService.resolveEmail(userEmail);
+        if (verifiedEmail == null || verifiedEmail.isBlank()) {
+            throw new ForbiddenException("Sign in is required.");
+        }
+        Claim claim = claims.findById(id).orElseThrow(() -> new NotFoundException("Claim not found"));
+        if (!verifiedEmail.equalsIgnoreCase(claim.getClaimantEmail())) {
+            throw new ForbiddenException("You can only withdraw your own claim.");
+        }
+        String status = claim.getStatus() == null ? "" : claim.getStatus().trim().toLowerCase();
+        if (List.of("approved", "completed", "rejected", "cancelled").contains(status)) {
+            throw new BadRequestException("This claim can no longer be withdrawn.");
+        }
+        claim.setStatus("cancelled");
+        claim.setUpdatedDate(Instant.now().toString());
+        return claims.save(claim);
+    }
+
     @GetMapping("/{id}")
     public Claim get(
             @PathVariable String id,
