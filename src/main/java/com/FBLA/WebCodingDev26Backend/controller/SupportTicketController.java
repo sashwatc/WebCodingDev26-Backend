@@ -65,7 +65,12 @@ public class SupportTicketController {
     }
 
     @GetMapping("/api/support/tickets/{ticketNumber}")
-    public SupportTicket getByTicketNumber(@PathVariable String ticketNumber) {
+    public SupportTicket getByTicketNumber(
+            @PathVariable String ticketNumber,
+            @RequestHeader(value = "X-Demo-User-Email", required = false) String userEmail) {
+        // Ticket records carry submitter PII and internal staff notes, and ticket
+        // numbers are guessable — restrict lookups to staff/admin.
+        authorizationService.requireStaffOrAdmin(userEmail);
         return service.getByTicketNumber(ticketNumber);
     }
 

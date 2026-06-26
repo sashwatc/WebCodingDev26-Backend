@@ -116,7 +116,13 @@ public class FoundItemController {
     }
 
     @DeleteMapping("/{id}")
-    public Map<String, Object> delete(@PathVariable String id) {
+    public Map<String, Object> delete(
+            @PathVariable String id,
+            @RequestHeader(value = "X-Demo-User-Email", required = false) String userEmail) {
+        // Deleting/archiving an item is a destructive moderation action — staff/admin only.
+        if (authorizationService != null) {
+            authorizationService.requireStaffOrAdmin(userEmail);
+        }
         return service.delete(id);
     }
 }

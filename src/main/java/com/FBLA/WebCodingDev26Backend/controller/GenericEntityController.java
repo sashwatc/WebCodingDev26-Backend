@@ -1,5 +1,6 @@
 package com.FBLA.WebCodingDev26Backend.controller;
 
+import com.FBLA.WebCodingDev26Backend.model.LostReport;
 import com.FBLA.WebCodingDev26Backend.service.GenericEntityService;
 import com.FBLA.WebCodingDev26Backend.service.DemoAuthorizationService;
 import java.util.List;
@@ -46,7 +47,36 @@ public class GenericEntityController {
             @RequestHeader(value = "X-Demo-User-Email", required = false) String userEmail
     ) {
         requireAdminForPrivateEntities(entityName, userEmail);
-        return service.list(entityName);
+        List<?> records = service.list(entityName);
+        if ("LostReport".equals(entityName) && !authorizationService.isStaffOrAdmin(userEmail)) {
+            redactLostReportContactInfo(records, authorizationService.resolveEmail(userEmail));
+        }
+        return records;
+    }
+
+    /**
+     * Lost reports carry reporter PII (name / email / phone / student id). For
+     * non-staff callers, strip those fields from every record the caller does not
+     * own, so the public browse and matching keep working without leaking contact
+     * details. Records are read-only here (never persisted back), so mutating the
+     * in-memory copies is safe.
+     */
+    private void redactLostReportContactInfo(List<?> records, String callerEmail) {
+        String caller = callerEmail == null ? "" : callerEmail.trim().toLowerCase(Locale.ROOT);
+        for (Object record : records) {
+            if (!(record instanceof LostReport report)) {
+                continue;
+            }
+            String owner = report.getContactEmail() == null
+                    ? ""
+                    : report.getContactEmail().trim().toLowerCase(Locale.ROOT);
+            if (caller.isBlank() || !caller.equals(owner)) {
+                report.setContactName(null);
+                report.setContactEmail(null);
+                report.setContactPhone(null);
+                report.setStudentId(null);
+            }
+        }
     }
 
     @PostMapping("/{entityName}")
