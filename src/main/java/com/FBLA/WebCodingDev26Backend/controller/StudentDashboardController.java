@@ -6,7 +6,6 @@ import com.FBLA.WebCodingDev26Backend.model.AppUser;
 import com.FBLA.WebCodingDev26Backend.model.Claim;
 import com.FBLA.WebCodingDev26Backend.model.LostReport;
 import com.FBLA.WebCodingDev26Backend.model.Notification;
-import com.FBLA.WebCodingDev26Backend.model.WatchedItem;
 import com.FBLA.WebCodingDev26Backend.repository.ClaimRepository;
 import com.FBLA.WebCodingDev26Backend.repository.FoundItemRepository;
 import com.FBLA.WebCodingDev26Backend.repository.LostReportRepository;
@@ -18,7 +17,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -37,7 +35,6 @@ public class StudentDashboardController {
     private final FoundItemRepository foundItems;
     private final DemoAuthorizationService authorizationService;
 
-    @Autowired
     public StudentDashboardController(
             ClaimRepository claims,
             LostReportRepository lostReports,

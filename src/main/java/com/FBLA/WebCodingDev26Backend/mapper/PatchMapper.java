@@ -1,7 +1,6 @@
 package com.FBLA.WebCodingDev26Backend.mapper;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.beans.FeatureDescriptor;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.Set;
@@ -45,7 +44,7 @@ public class PatchMapper {
     private String[] getNullPropertyNames(Object source) {
         BeanWrapper wrappedSource = new BeanWrapperImpl(source);
         return Stream.of(wrappedSource.getPropertyDescriptors())
-                .map(FeatureDescriptor::getName)
+                .map(descriptor -> descriptor.getName())
                 .filter(propertyName -> wrappedSource.getPropertyValue(propertyName) == null)
                 .toArray(String[]::new);
     }

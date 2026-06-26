@@ -58,7 +58,7 @@ public class AdminWorkflowService {
     public Map<String, Object> dashboard() {
         List<Claim> allClaims = claims.findAll();
         List<AuditLog> recentAudit = auditLogs.findAll().stream()
-                .sorted(Comparator.comparing(AuditLog::getCreatedDate, Comparator.nullsLast(Comparator.reverseOrder())))
+                .sorted(Comparator.comparing(log -> log.getCreatedDate(), Comparator.nullsLast(Comparator.reverseOrder())))
                 .limit(25)
                 .toList();
 
@@ -191,10 +191,6 @@ public class AdminWorkflowService {
         Object value = data.getOrDefault("message", data.getOrDefault("admin_notes", data.get("adminNotes")));
         String sanitized = sanitizer.sanitizeText(value == null ? "" : String.valueOf(value));
         return sanitized.isBlank() ? fallback : sanitized;
-    }
-
-    private void audit(String action, String entityType, String entityId, String performedBy, String details) {
-        audit(action, entityType, entityId, performedBy, details, null);
     }
 
     private void audit(String action, String entityType, String entityId, String performedBy, String details, String humanReadableMessage) {

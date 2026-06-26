@@ -12,7 +12,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -30,7 +29,6 @@ public class StaffWorkQueueController {
     private final SupportTicketRepository supportTickets;
     private final DemoAuthorizationService authorizationService;
 
-    @Autowired
     public StaffWorkQueueController(
             FoundItemRepository foundItems,
             ClaimRepository claims,

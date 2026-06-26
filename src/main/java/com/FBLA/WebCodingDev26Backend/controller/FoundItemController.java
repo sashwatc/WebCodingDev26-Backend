@@ -1,7 +1,6 @@
 package com.FBLA.WebCodingDev26Backend.controller;
 
 import com.FBLA.WebCodingDev26Backend.dto.PublicFoundItemResponse;
-import com.FBLA.WebCodingDev26Backend.model.AppUser;
 import com.FBLA.WebCodingDev26Backend.model.FoundItem;
 import com.FBLA.WebCodingDev26Backend.service.DemoAuthorizationService;
 import com.FBLA.WebCodingDev26Backend.service.FoundItemService;

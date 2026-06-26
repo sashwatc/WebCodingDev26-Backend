@@ -14,7 +14,6 @@ import com.FBLA.WebCodingDev26Backend.repository.CustodyEventRepository;
 import com.FBLA.WebCodingDev26Backend.repository.FoundItemRepository;
 import com.FBLA.WebCodingDev26Backend.repository.LostReportRepository;
 import com.FBLA.WebCodingDev26Backend.repository.RecoveryCaseRepository;
-import com.FBLA.WebCodingDev26Backend.service.SavedSearchService;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -360,10 +359,7 @@ public class FoundItemService {
         if (recoveryCases != null && recoveryCases.findAll().stream().anyMatch(recoveryCase -> foundItemId.equals(recoveryCase.getSelectedFoundItemId()))) {
             return true;
         }
-        if (lostReports != null && lostReports.findAll().stream().anyMatch(report -> containsMatch(report, foundItemId))) {
-            return true;
-        }
-        return false;
+        return lostReports != null && lostReports.findAll().stream().anyMatch(report -> containsMatch(report, foundItemId));
     }
 
     private boolean containsMatch(LostReport report, String foundItemId) {

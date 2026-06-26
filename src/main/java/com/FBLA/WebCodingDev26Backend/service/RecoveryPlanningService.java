@@ -66,7 +66,7 @@ public class RecoveryPlanningService {
         }
 
         return recommendations.stream()
-                .sorted(Comparator.comparingInt(ZoneRecommendation::score).reversed())
+                .sorted(Comparator.comparingInt((ZoneRecommendation recommendation) -> recommendation.score()).reversed())
                 .limit(5)
                 .toList();
     }

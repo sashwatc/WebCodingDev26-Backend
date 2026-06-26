@@ -9,7 +9,6 @@ import com.FBLA.WebCodingDev26Backend.model.LostReport;
 import com.FBLA.WebCodingDev26Backend.model.MatchSuggestion;
 import com.FBLA.WebCodingDev26Backend.model.RecoveryCase;
 import com.FBLA.WebCodingDev26Backend.repository.AuditLogRepository;
-import com.FBLA.WebCodingDev26Backend.repository.ClaimRepository;
 import com.FBLA.WebCodingDev26Backend.repository.LostReportRepository;
 import com.FBLA.WebCodingDev26Backend.repository.RecoveryCaseRepository;
 import java.time.Instant;
@@ -42,7 +41,6 @@ public class RecoveryCaseService {
 
     private final RecoveryCaseRepository cases;
     private final LostReportRepository lostReports;
-    private final ClaimRepository claims;
     private final AuditLogRepository auditLogs;
     private final RecoveryPlanningService planningService;
     private final PatchMapper mapper;
@@ -57,27 +55,25 @@ public class RecoveryCaseService {
             PatchMapper mapper,
             ClockService clock
     ) {
-        this(cases, lostReports, null, null, planningService, mapper, clock, new InputSanitizer(), null);
+        this(cases, lostReports, null, planningService, mapper, clock, new InputSanitizer(), null);
     }
 
     public RecoveryCaseService(
             RecoveryCaseRepository cases,
             LostReportRepository lostReports,
-            ClaimRepository claims,
             AuditLogRepository auditLogs,
             RecoveryPlanningService planningService,
             PatchMapper mapper,
             ClockService clock,
             InputSanitizer sanitizer
     ) {
-        this(cases, lostReports, claims, auditLogs, planningService, mapper, clock, sanitizer, null);
+        this(cases, lostReports, auditLogs, planningService, mapper, clock, sanitizer, null);
     }
 
     @Autowired
     public RecoveryCaseService(
             RecoveryCaseRepository cases,
             LostReportRepository lostReports,
-            ClaimRepository claims,
             AuditLogRepository auditLogs,
             RecoveryPlanningService planningService,
             PatchMapper mapper,
@@ -87,7 +83,6 @@ public class RecoveryCaseService {
     ) {
         this.cases = cases;
         this.lostReports = lostReports;
-        this.claims = claims;
         this.auditLogs = auditLogs;
         this.planningService = planningService;
         this.mapper = mapper;
@@ -294,16 +289,19 @@ public class RecoveryCaseService {
         }
         List<MatchSuggestion> suggestions = new ArrayList<>();
         for (Object value : report.getMatchedItems()) {
-            if (value instanceof MatchSuggestion suggestion) {
-                suggestions.add(suggestion);
-            } else if (value instanceof Map<?, ?> raw) {
-                MatchSuggestion suggestion = new MatchSuggestion();
-                Object id = raw.containsKey("foundItemId") ? raw.get("foundItemId") : raw.get("found_item_id");
-                Object title = raw.containsKey("foundItemTitle") ? raw.get("foundItemTitle") : raw.get("found_item_title");
-                if (id != null) {
-                    suggestion.setFoundItemId(String.valueOf(id));
-                    suggestion.setFoundItemTitle(title == null ? "" : String.valueOf(title));
-                    suggestions.add(suggestion);
+            switch (value) {
+                case MatchSuggestion suggestion -> suggestions.add(suggestion);
+                case Map<?, ?> raw -> {
+                    MatchSuggestion suggestion = new MatchSuggestion();
+                    Object id = raw.containsKey("foundItemId") ? raw.get("foundItemId") : raw.get("found_item_id");
+                    Object title = raw.containsKey("foundItemTitle") ? raw.get("foundItemTitle") : raw.get("found_item_title");
+                    if (id != null) {
+                        suggestion.setFoundItemId(String.valueOf(id));
+                        suggestion.setFoundItemTitle(title == null ? "" : String.valueOf(title));
+                        suggestions.add(suggestion);
+                    }
+                }
+                default -> {
                 }
             }
         }
@@ -333,15 +331,6 @@ public class RecoveryCaseService {
         if (!isBlank(status) && !CASE_STATUSES.contains(normalize(status))) {
             throw new BadRequestException("Recovery case status must be one of " + CASE_STATUSES + ".");
         }
-    }
-
-    private boolean isClaimAwaitingReview(Claim claim) {
-        return List.of("", "submitted", "pending_review", "under_review", "need_more_info")
-                .contains(normalize(claim.getStatus()));
-    }
-
-    private boolean statusEquals(String actual, String expected) {
-        return normalize(actual).equals(expected);
     }
 
     private String valueOrDefault(String value, String fallback) {

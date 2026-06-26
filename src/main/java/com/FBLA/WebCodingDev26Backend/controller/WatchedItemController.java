@@ -9,13 +9,11 @@ import com.FBLA.WebCodingDev26Backend.model.WatchedItem;
 import com.FBLA.WebCodingDev26Backend.repository.FoundItemRepository;
 import com.FBLA.WebCodingDev26Backend.repository.WatchedItemRepository;
 import com.FBLA.WebCodingDev26Backend.service.DemoAuthorizationService;
-import com.FBLA.WebCodingDev26Backend.service.FoundItemService;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -32,18 +30,14 @@ import org.springframework.web.bind.annotation.RestController;
 public class WatchedItemController {
     private final WatchedItemRepository watchedItems;
     private final FoundItemRepository foundItems;
-    private final FoundItemService foundItemService;
     private final DemoAuthorizationService authorizationService;
 
-    @Autowired
     public WatchedItemController(
             WatchedItemRepository watchedItems,
             FoundItemRepository foundItems,
-            FoundItemService foundItemService,
             DemoAuthorizationService authorizationService) {
         this.watchedItems = watchedItems;
         this.foundItems = foundItems;
-        this.foundItemService = foundItemService;
         this.authorizationService = authorizationService;
     }
 

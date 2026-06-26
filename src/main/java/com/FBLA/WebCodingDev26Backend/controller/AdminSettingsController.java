@@ -4,10 +4,11 @@ import com.FBLA.WebCodingDev26Backend.exception.BadRequestException;
 import com.FBLA.WebCodingDev26Backend.model.AppUser;
 import com.FBLA.WebCodingDev26Backend.service.DemoAuthorizationService;
 import com.FBLA.WebCodingDev26Backend.service.SystemSettingService;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Map;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -19,6 +20,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/admin/settings")
 public class AdminSettingsController {
+    private static final TypeReference<List<String>> STRING_LIST_TYPE = new TypeReference<>() {
+    };
     private static final List<String> DEFAULT_CATEGORIES = List.of(
             "electronics", "clothing", "bags_cases", "personal_items",
             "food_containers", "books_stationery", "keys", "jewelry",
@@ -29,7 +32,6 @@ public class AdminSettingsController {
     private final DemoAuthorizationService authorizationService;
     private final ObjectMapper objectMapper;
 
-    @Autowired
     public AdminSettingsController(
             SystemSettingService service,
             DemoAuthorizationService authorizationService,
@@ -73,10 +75,8 @@ public class AdminSettingsController {
             return DEFAULT_CATEGORIES;
         }
         try {
-            @SuppressWarnings("unchecked")
-            List<String> parsed = objectMapper.readValue(stored, List.class);
-            return parsed;
-        } catch (Exception e) {
+            return objectMapper.readValue(stored, STRING_LIST_TYPE);
+        } catch (JsonProcessingException e) {
             return DEFAULT_CATEGORIES;
         }
     }

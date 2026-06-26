@@ -244,7 +244,7 @@ public class MatchmakingService {
         List<ScoredItem> scoredItems = possibleItems.stream()
                 .map(item -> score(report, item))
                 .filter(scored -> scored.score() >= minConfidence)
-                .sorted(Comparator.comparingInt(ScoredItem::score).reversed())
+                .sorted(Comparator.comparingInt((ScoredItem scored) -> scored.score()).reversed())
                 .limit(maxCandidates)
                 .toList();
 
@@ -253,7 +253,7 @@ public class MatchmakingService {
         }
 
         Map<String, AiMatchClient.AiMatchResult> aiResults = new LinkedHashMap<>();
-        aiMatchClient.rankMatches(report, scoredItems.stream().map(ScoredItem::item).toList())
+        aiMatchClient.rankMatches(report, scoredItems.stream().map(scored -> scored.item()).toList())
                 .forEach(result -> aiResults.put(result.foundItemId(), result));
 
         List<MatchSuggestion> matches = new ArrayList<>();
@@ -263,7 +263,7 @@ public class MatchmakingService {
         }
 
         return matches.stream()
-                .sorted(Comparator.comparing(MatchSuggestion::getConfidence, Comparator.nullsLast(Comparator.reverseOrder())))
+                .sorted(Comparator.comparing((MatchSuggestion match) -> match.getConfidence(), Comparator.nullsLast(Comparator.reverseOrder())))
                 .toList();
     }
 
@@ -560,7 +560,7 @@ public class MatchmakingService {
             return number.intValue();
         }
         try {
-            return value == null ? null : Integer.parseInt(String.valueOf(value));
+            return value == null ? null : Integer.parseInt(value.toString());
         } catch (NumberFormatException exception) {
             return null;
         }

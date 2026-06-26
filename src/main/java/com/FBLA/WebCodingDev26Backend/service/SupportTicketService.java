@@ -6,13 +6,11 @@ import com.FBLA.WebCodingDev26Backend.model.CaseMessage;
 import com.FBLA.WebCodingDev26Backend.model.SupportTicket;
 import com.FBLA.WebCodingDev26Backend.repository.CaseMessageRepository;
 import com.FBLA.WebCodingDev26Backend.repository.SupportTicketRepository;
-import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.UUID;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -22,7 +20,6 @@ public class SupportTicketService {
     private final RecoveryPulseDispatcher recoveryPulse;
     private final ClockService clock;
 
-    @Autowired
     public SupportTicketService(
             SupportTicketRepository repository,
             CaseMessageRepository caseMessages,
@@ -111,12 +108,12 @@ public class SupportTicketService {
 
         // Notify submitter if they have an email
         if (recoveryPulse != null && !ticket.getSubmitterEmail().isBlank()) {
-            notifySupportReply(ticket, staffEmail, replyMessage);
+            notifySupportReply(ticket, staffEmail);
         }
         return saved;
     }
 
-    private void notifySupportReply(SupportTicket ticket, String staffEmail, String replyMessage) {
+    private void notifySupportReply(SupportTicket ticket, String staffEmail) {
         try {
             recoveryPulse.dispatch(new RecoveryPulseEvent(
                     "support_reply",

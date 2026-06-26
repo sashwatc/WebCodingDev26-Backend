@@ -141,6 +141,7 @@ public class SeedDataConfig {
                 }
 
                 if (foundItems.count() > 0) {
+                    seedRealisticActivity(foundItems, lostReports, claims, notifications);
                     return;
                 }
 
@@ -153,6 +154,7 @@ public class SeedDataConfig {
                 seedPasses(returnPasses);
                 seedRelay(recoveryNodes);
                 seedCustody(custodyLedgerService);
+                seedRealisticActivity(foundItems, lostReports, claims, notifications);
 
                 notifications.save(notification("notif_001", "jordan.kim@pleasantvalley.edu", "Strong match available", "A strong possible match is ready for review.", "strong_item_match", "/UserDashboard", "found_002"));
                 notifications.save(notification("notif_return_pass_demo", "riley.chen@pleasantvalley.edu", "Return Pass ready", "Your Return Pass is ready. Open Lost Then Found for secure pickup instructions.", "return_pass_ready", "/return-pass/pass_calculator_active", "found_claimed_calculator"));
@@ -212,7 +214,7 @@ public class SeedDataConfig {
         FoundItem airpods = foundItem("found_airpods_game", "Black AirPods-style Case", "electronics", "Black wireless earbud case found after the basketball game.", "Black", "Apple", "Gym Bleachers", "2026-03-14", "20:40", ItemStatus.FOUND, "FB-2026-AP14");
         airpods.setEventHubId("hub_basketball_game");
         airpods.setCampusZoneId("zone_gym_bleachers");
-        airpods.setPhotoUrls(List.of("/items/black-airpods-case.jpg"));
+        airpods.setPhotoUrls(List.of("/items/airpods-pro-case.png"));
         airpods.setTags(List.of("airpods", "black", "earbuds", "gym bleachers"));
         airpods.setPrivateVerificationClues(List.of("small silver initials on the hinge", "tiny scratch along the left back corner"));
         airpods.setStorageLocation("Main Office sealed bin A1");
@@ -220,6 +222,7 @@ public class SeedDataConfig {
         FoundItem calculator = foundItem("found_calculator_demo", "Silver Graphing Calculator", "electronics", "Silver graphing calculator found near the gym entrance.", "Silver", "Texas Instruments", "Gym Entrance", "2026-03-14", "19:30", ItemStatus.FOUND, "FB-2026-CAL55");
         calculator.setEventHubId("hub_basketball_game");
         calculator.setCampusZoneId("zone_gym_entrance");
+        calculator.setPhotoUrls(List.of("/items/ti-calculator.png"));
         calculator.setPrivateVerificationClues(List.of("name label under the slide cover", "faint star sticker on the back"));
         calculator.setTags(List.of("calculator", "silver", "texas instruments", "gym entrance"));
         calculator.setStorageLocation("Main Office sealed bin A2");
@@ -228,11 +231,13 @@ public class SeedDataConfig {
         passItem.setEventHubId("hub_basketball_game");
         passItem.setCampusZoneId("zone_gym_entrance");
         passItem.setPrivateVerificationClues(List.of("name label under the slide cover"));
+        passItem.setPhotoUrls(List.of("/items/ti-calculator.png"));
         passItem.setStorageLocation("Main Office pickup drawer");
 
         FoundItem returned = foundItem("found_returned_lanyard", "PVHS Lanyard With Keys", "personal_items", "Blue PVHS lanyard with two keys.", "Blue", "PVHS", "Athletics Office", "2026-03-13", "17:20", ItemStatus.ARCHIVED, "FB-2026-KEY22");
         returned.setEventHubId("hub_basketball_game");
         returned.setCampusZoneId("zone_athletics");
+        returned.setPhotoUrls(List.of("/items/pvhs-lanyard.png"));
         returned.setClaimConfirmed(true);
         returned.setClaimConfirmedAt("2026-03-14T16:30:00Z");
 
@@ -241,19 +246,132 @@ public class SeedDataConfig {
         chromebook.setAssetRecordId("asset_cb_1042");
         chromebook.setDepartmentDestination("Technology Office");
         chromebook.setRestrictedVisibility(true);
+        chromebook.setPhotoUrls(List.of("/images/locker-cool.png"));
         chromebook.setStorageLocation("Technology Office intake shelf");
 
         FoundItem hoodie = foundItem("found_blue_hoodie", "Blue Zip-Up Hoodie", "clothing", "Blue zip-up hoodie with a school logo on the left chest.", "Blue", "", "Cafeteria", "2026-03-15", "12:30", ItemStatus.FOUND, "FB-2026-HDY01");
         hoodie.setCampusZoneId("zone_cafeteria");
+        hoodie.setPhotoUrls(List.of("/items/nike-hoodie.png"));
         hoodie.setTags(List.of("hoodie", "blue", "zip-up", "clothing"));
         hoodie.setStorageLocation("Main Office clothing bin");
 
         FoundItem umbrella = foundItem("found_red_umbrella", "Red Compact Umbrella", "personal_items", "Small red compact umbrella found in the library study area.", "Red", "", "Library Study Area", "2026-03-15", "14:00", ItemStatus.FOUND, "FB-2026-UMB02");
         umbrella.setCampusZoneId("zone_library");
+        umbrella.setPhotoUrls(List.of("/items/red-umbrella.png"));
         umbrella.setTags(List.of("umbrella", "red", "compact", "library"));
         umbrella.setStorageLocation("Main Office shelf B3");
 
         foundItems.saveAll(List.of(bottle, backpack, airpods, calculator, passItem, returned, chromebook, hoodie, umbrella));
+    }
+
+    private void seedRealisticActivity(
+            FoundItemRepository foundItems,
+            LostReportRepository lostReports,
+            ClaimRepository claims,
+            NotificationRepository notifications
+    ) {
+        FoundItem charger = foundItem("found_usbc_charger", "White USB-C Charger", "electronics", "White USB-C wall charger and cable found beside the cafeteria charging rail.", "White", "Apple", "Cafeteria", "2026-03-16", "13:10", ItemStatus.FOUND, "FB-2026-USBC");
+        charger.setCampusZoneId("zone_cafeteria");
+        charger.setPhotoUrls(List.of("/items/usbc-charger.png"));
+        charger.setTags(List.of("charger", "usb-c", "white", "cafeteria"));
+        charger.setPrivateVerificationClues(List.of("small blue tape mark near the plug", "short six-foot cable included"));
+        charger.setStorageLocation("Main Office electronics drawer");
+        charger.setFinderName("Nora Lee");
+        charger.setFinderEmail("nora.lee@pleasantvalley.edu");
+        charger.setFinderRole("student");
+
+        FoundItem textbook = foundItem("found_ap_biology_textbook", "AP Biology Textbook", "books_stationery", "Campbell AP Biology textbook with a PVHS library barcode.", "Green", "Pearson", "Library Study Area", "2026-03-16", "09:45", ItemStatus.FOUND, "FB-2026-BIO");
+        textbook.setCampusZoneId("zone_library");
+        textbook.setAssetTag("LIB-BOOK-8821");
+        textbook.setAssetRecordId("asset_book_8821");
+        textbook.setDepartmentDestination("Library Return Desk");
+        textbook.setPhotoUrls(List.of("/items/ap-biology-textbook.png"));
+        textbook.setTags(List.of("textbook", "biology", "library", "green"));
+        textbook.setStorageLocation("Library return desk");
+        textbook.setFinderName("Ms. Harper");
+        textbook.setFinderEmail("harper@pleasantvalley.edu");
+        textbook.setFinderRole("staff");
+
+        FoundItem kneepads = foundItem("found_volleyball_kneepads", "Black Volleyball Knee Pads", "sports_equipment", "Pair of black volleyball knee pads found after practice.", "Black", "Nike", "Gym Bleachers", "2026-03-16", "17:35", ItemStatus.FOUND, "FB-2026-KNEE");
+        kneepads.setCampusZoneId("zone_gym_bleachers");
+        kneepads.setPhotoUrls(List.of("/items/volleyball-kneepads.png"));
+        kneepads.setTags(List.of("volleyball", "knee pads", "black", "gym"));
+        kneepads.setStorageLocation("Athletics Office bin");
+        kneepads.setFinderName("Coach Miller");
+        kneepads.setFinderEmail("coach.miller@pleasantvalley.edu");
+        kneepads.setFinderRole("staff");
+
+        FoundItem pencilCase = foundItem("found_pink_pencil_case", "Pink Pencil Case", "books_stationery", "Pink zipper pencil case with highlighters and mechanical pencils.", "Pink", "", "Auditorium", "2026-03-17", "10:20", ItemStatus.FOUND, "FB-2026-PENC");
+        pencilCase.setCampusZoneId("zone_auditorium");
+        pencilCase.setPhotoUrls(List.of("/items/pink-pencil-case.png"));
+        pencilCase.setTags(List.of("pencil case", "pink", "auditorium", "stationery"));
+        pencilCase.setStorageLocation("Main Office shelf C1");
+        pencilCase.setFinderName("Evan Brooks");
+        pencilCase.setFinderEmail("evan.brooks@pleasantvalley.edu");
+        pencilCase.setFinderRole("student");
+
+        FoundItem sunglasses = foundItem("found_rayban_sunglasses", "Black Sunglasses", "personal_items", "Black sunglasses in a soft case found near the bus loop.", "Black", "Ray-Ban", "Bus Loop", "2026-03-17", "15:45", ItemStatus.VERIFIED, "FB-2026-SUN");
+        sunglasses.setCampusZoneId("zone_bus_loop");
+        sunglasses.setPhotoUrls(List.of("/items/rayban-sunglasses.png"));
+        sunglasses.setTags(List.of("sunglasses", "black", "bus loop", "case"));
+        sunglasses.setStorageLocation("Main Office shelf A4");
+        sunglasses.setFinderName("Transportation Desk");
+        sunglasses.setFinderEmail("transportation@pleasantvalley.edu");
+        sunglasses.setFinderRole("staff");
+
+        FoundItem watch = foundItem("found_casio_watch", "Black Digital Watch", "jewelry", "Black digital watch found on the auditorium stage steps.", "Black", "Casio", "Auditorium", "2026-03-17", "18:05", ItemStatus.FOUND, "FB-2026-WTCH");
+        watch.setCampusZoneId("zone_auditorium");
+        watch.setPhotoUrls(List.of("/items/casio-watch.png"));
+        watch.setTags(List.of("watch", "casio", "black", "auditorium"));
+        watch.setPrivateVerificationClues(List.of("alarm is set for 6:45 AM", "small nick on the lower strap"));
+        watch.setStorageLocation("Main Office valuables pouch");
+        watch.setFinderName("Stage Crew");
+        watch.setFinderEmail("stagecrew@pleasantvalley.edu");
+        watch.setFinderRole("student");
+
+        saveSeeded(foundItems, charger);
+        saveSeeded(foundItems, textbook);
+        saveSeeded(foundItems, kneepads);
+        saveSeeded(foundItems, pencilCase);
+        saveSeeded(foundItems, sunglasses);
+        saveSeeded(foundItems, watch);
+
+        LostReport chargerReport = lostReport("lost_usbc_charger", "Lost white USB-C charger", "electronics", "White USB-C charger and cable left near the cafeteria charging rail.", "White", "Apple", "Cafeteria", "2026-03-16", "sophia.nguyen@pleasantvalley.edu");
+        chargerReport.setContactName("Sophia Nguyen");
+        chargerReport.setCampusZoneId("zone_cafeteria");
+        chargerReport.setPhotoUrls(List.of("/items/usbc-charger.png"));
+        chargerReport.setMatchedItems(List.of(match("found_usbc_charger", "White USB-C Charger", 91)));
+        saveSeeded(lostReports, chargerReport);
+
+        LostReport textbookReport = lostReport("lost_ap_biology_textbook", "Lost AP Biology textbook", "books_stationery", "Green AP Biology textbook last used during library study hall.", "Green", "Pearson", "Library Study Area", "2026-03-16", "jordan.kim@pleasantvalley.edu");
+        textbookReport.setContactName("Jordan Kim");
+        textbookReport.setCampusZoneId("zone_library");
+        textbookReport.setPhotoUrls(List.of("/items/ap-biology-textbook.png"));
+        textbookReport.setMatchedItems(List.of(match("found_ap_biology_textbook", "AP Biology Textbook", 89)));
+        saveSeeded(lostReports, textbookReport);
+
+        LostReport sunglassesReport = lostReport("lost_black_sunglasses", "Lost black sunglasses", "personal_items", "Black sunglasses in a soft case, possibly left near the bus loop.", "Black", "Ray-Ban", "Bus Loop", "2026-03-17", "mia.rodriguez@pleasantvalley.edu");
+        sunglassesReport.setContactName("Mia Rodriguez");
+        sunglassesReport.setCampusZoneId("zone_bus_loop");
+        sunglassesReport.setPhotoUrls(List.of("/items/rayban-sunglasses.png"));
+        sunglassesReport.setMatchedItems(List.of(match("found_rayban_sunglasses", "Black Sunglasses", 86)));
+        saveSeeded(lostReports, sunglassesReport);
+
+        Claim textbookClaim = claim("claim_textbook_needs_info", "found_ap_biology_textbook", "Jordan Kim", "jordan.kim@pleasantvalley.edu", "need_more_info");
+        textbookClaim.setAdminNotes("Please confirm the library barcode or teacher name written inside the cover.");
+        textbookClaim.setClaimReason("This looks like my AP Biology book from fourth period study hall.");
+        textbookClaim.setIdentifyingDetails("The first page should have my last name and a sticky note from unit 7.");
+        saveSeeded(claims, textbookClaim);
+
+        Claim sunglassesClaim = claim("claim_sunglasses_rejected", "found_rayban_sunglasses", "Mia Rodriguez", "mia.rodriguez@pleasantvalley.edu", "rejected");
+        sunglassesClaim.setAdminNotes("Claim details did not match the case and frame description.");
+        sunglassesClaim.setClaimReason("I lost black sunglasses after school near the bus loop.");
+        sunglassesClaim.setIdentifyingDetails("Mine did not have a case, so these may not be mine.");
+        saveSeeded(claims, sunglassesClaim);
+
+        saveIfMissing(notifications, notification("notif_charger_match", "sophia.nguyen@pleasantvalley.edu", "Possible charger match", "A white USB-C charger may match your lost report.", "strong_item_match", "/UserDashboard", "found_usbc_charger"));
+        saveIfMissing(notifications, notification("notif_textbook_info", "jordan.kim@pleasantvalley.edu", "More info needed", "Staff requested one more detail for your AP Biology textbook claim.", "claim_more_info", "/claims/claim_textbook_needs_info", "found_ap_biology_textbook"));
+        saveIfMissing(notifications, notification("notif_sunglasses_reviewed", "mia.rodriguez@pleasantvalley.edu", "Claim reviewed", "Staff reviewed the sunglasses claim and left a decision.", "claim_reviewed", "/claims/claim_sunglasses_rejected", "found_rayban_sunglasses"));
     }
 
     private void seedLostReports(LostReportRepository lostReports) {
@@ -431,6 +549,42 @@ public class SeedDataConfig {
         claim.setUpdatedDate(NOW);
         claim.setIsDemo(true);
         return claim;
+    }
+
+    private void saveIfMissing(NotificationRepository repository, Notification notification) {
+        if (repository != null && repository.findById(notification.getId()).isEmpty()) {
+            repository.save(notification);
+        }
+    }
+
+    private void saveSeeded(FoundItemRepository repository, FoundItem item) {
+        if (repository == null) {
+            return;
+        }
+        FoundItem existing = repository.findById(item.getId()).orElse(null);
+        if (existing == null || Boolean.TRUE.equals(existing.getIsDemo())) {
+            repository.save(item);
+        }
+    }
+
+    private void saveSeeded(LostReportRepository repository, LostReport report) {
+        if (repository == null) {
+            return;
+        }
+        LostReport existing = repository.findById(report.getId()).orElse(null);
+        if (existing == null || Boolean.TRUE.equals(existing.getIsDemo())) {
+            repository.save(report);
+        }
+    }
+
+    private void saveSeeded(ClaimRepository repository, Claim claim) {
+        if (repository == null) {
+            return;
+        }
+        Claim existing = repository.findById(claim.getId()).orElse(null);
+        if (existing == null || Boolean.TRUE.equals(existing.getIsDemo())) {
+            repository.save(claim);
+        }
     }
 
     private ReturnPass pass(String id, String claimId, String itemId, String email, String status, String code) {

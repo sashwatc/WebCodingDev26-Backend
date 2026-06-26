@@ -6,9 +6,9 @@ import com.FBLA.WebCodingDev26Backend.model.AppUser;
 import com.FBLA.WebCodingDev26Backend.model.SavedSearch;
 import com.FBLA.WebCodingDev26Backend.service.DemoAuthorizationService;
 import com.FBLA.WebCodingDev26Backend.service.SavedSearchService;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,7 +27,6 @@ public class SavedSearchController {
     private final SavedSearchService service;
     private final DemoAuthorizationService authorizationService;
 
-    @Autowired
     public SavedSearchController(SavedSearchService service, DemoAuthorizationService authorizationService) {
         this.service = service;
         this.authorizationService = authorizationService;
@@ -58,15 +57,14 @@ public class SavedSearchController {
         if (name.isBlank()) {
             throw new BadRequestException("Name is required.");
         }
-        @SuppressWarnings("unchecked")
         Map<String, String> filters = body.get("filters") instanceof Map<?, ?> rawMap
-                ? (Map<String, String>) rawMap.entrySet().stream()
+                ? rawMap.entrySet().stream()
                         .collect(java.util.stream.Collectors.toMap(
                                 e -> String.valueOf(e.getKey()),
                                 e -> String.valueOf(e.getValue()),
                                 (a, b) -> b,
-                                java.util.LinkedHashMap::new))
-                : new java.util.LinkedHashMap<>();
+                                LinkedHashMap::new))
+                : new LinkedHashMap<>();
         Boolean alertsEnabled = body.get("alertsEnabled") instanceof Boolean b ? b
                 : body.get("alerts_enabled") instanceof Boolean b2 ? b2 : false;
         return service.create(user.getEmail(), name, filters, alertsEnabled);

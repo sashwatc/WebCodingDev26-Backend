@@ -1,7 +1,6 @@
 package com.FBLA.WebCodingDev26Backend.service;
 
 import com.FBLA.WebCodingDev26Backend.dto.PatternReviewResult;
-import com.FBLA.WebCodingDev26Backend.exception.BadRequestException;
 import com.FBLA.WebCodingDev26Backend.exception.NotFoundException;
 import com.FBLA.WebCodingDev26Backend.mapper.PatchMapper;
 import com.FBLA.WebCodingDev26Backend.model.AuditLog;
@@ -16,7 +15,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,7 +33,6 @@ public class LossSentinelService {
     private final LostReportRepository lostReports;
     @SuppressWarnings("unused")
     private final CampusZoneRepository zones;
-    private final RecoveryCaseService recoveryCaseService;
     private final AuditLogRepository auditLogs;
     private final PatchMapper mapper;
     private final ClockService clock;
@@ -49,20 +46,19 @@ public class LossSentinelService {
             PatchMapper mapper,
             ClockService clock
     ) {
-        this(alerts, lostReports, zones, null, null, mapper, clock, new InputSanitizer(), null);
+        this(alerts, lostReports, zones, null, mapper, clock, new InputSanitizer(), null);
     }
 
     public LossSentinelService(
             PreventionAlertRepository alerts,
             LostReportRepository lostReports,
             CampusZoneRepository zones,
-            RecoveryCaseService recoveryCaseService,
             AuditLogRepository auditLogs,
             PatchMapper mapper,
             ClockService clock,
             InputSanitizer sanitizer
     ) {
-        this(alerts, lostReports, zones, recoveryCaseService, auditLogs, mapper, clock, sanitizer, null);
+        this(alerts, lostReports, zones, auditLogs, mapper, clock, sanitizer, null);
     }
 
     @Autowired
@@ -70,7 +66,6 @@ public class LossSentinelService {
             PreventionAlertRepository alerts,
             LostReportRepository lostReports,
             CampusZoneRepository zones,
-            RecoveryCaseService recoveryCaseService,
             AuditLogRepository auditLogs,
             PatchMapper mapper,
             ClockService clock,
@@ -80,7 +75,6 @@ public class LossSentinelService {
         this.alerts = alerts;
         this.lostReports = lostReports;
         this.zones = zones;
-        this.recoveryCaseService = recoveryCaseService;
         this.auditLogs = auditLogs;
         this.mapper = mapper;
         this.clock = clock;
@@ -249,8 +243,8 @@ public class LossSentinelService {
             return List.of();
         }
         return alert.getSourceLostReportIds().stream()
-                .map(lostReports::findById)
-                .flatMap(Optional::stream)
+                .map(lostReportId -> lostReports.findById(lostReportId))
+                .flatMap(optionalReport -> optionalReport.stream())
                 .toList();
     }
 
@@ -265,16 +259,6 @@ public class LossSentinelService {
         PreventionAlert saved = alerts.save(existing);
         audit("PATTERN_REVIEW_ALERT_" + status.toUpperCase(), "PreventionAlert", saved.getId(), adminEmail, note);
         return saved;
-    }
-
-    private LostReport firstSourceReport(PreventionAlert alert) {
-        for (String lostReportId : alert.getSourceLostReportIds()) {
-            Optional<LostReport> report = lostReports.findById(lostReportId);
-            if (report.isPresent()) {
-                return report.get();
-            }
-        }
-        throw new BadRequestException("Pattern Review alert does not have source Lost Reports.");
     }
 
     private boolean isResolved(String status) {

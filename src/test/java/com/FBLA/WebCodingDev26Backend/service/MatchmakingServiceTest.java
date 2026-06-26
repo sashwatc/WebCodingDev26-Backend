@@ -112,7 +112,7 @@ class MatchmakingServiceTest {
 
         List<MatchSuggestion> matches = service().getMatchesForLostReport("lost_001");
 
-        assertThat(matches).extracting(MatchSuggestion::getFoundItemId).containsExactly("found_legacy", "found_map");
+        assertThat(matches).extracting((MatchSuggestion match) -> match.getFoundItemId()).containsExactly("found_legacy", "found_map");
         assertThat(matches.get(0).getSource()).isEqualTo("legacy");
         assertThat(matches.get(1).getConfidence()).isEqualTo(77);
     }

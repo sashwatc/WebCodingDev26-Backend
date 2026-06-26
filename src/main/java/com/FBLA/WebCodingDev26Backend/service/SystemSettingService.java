@@ -5,17 +5,14 @@ import com.FBLA.WebCodingDev26Backend.model.SystemSetting;
 import com.FBLA.WebCodingDev26Backend.repository.SystemSettingRepository;
 import java.time.Instant;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
 public class SystemSettingService {
     private final SystemSettingRepository repository;
 
-    @Autowired
     public SystemSettingService(SystemSettingRepository repository) {
         this.repository = repository;
     }
@@ -43,7 +40,7 @@ public class SystemSettingService {
     }
 
     public String get(String key, String defaultValue) {
-        return repository.findByKey(key).map(SystemSetting::getValue).orElse(defaultValue);
+        return repository.findByKey(key).map(setting -> setting.getValue()).orElse(defaultValue);
     }
 
     /** Seed a setting only if it doesn't already exist. */

@@ -6,7 +6,6 @@ import com.FBLA.WebCodingDev26Backend.exception.NotFoundException;
 import com.FBLA.WebCodingDev26Backend.model.AppUser;
 import com.FBLA.WebCodingDev26Backend.model.CaseMessage;
 import com.FBLA.WebCodingDev26Backend.model.Claim;
-import com.FBLA.WebCodingDev26Backend.model.FoundItem;
 import com.FBLA.WebCodingDev26Backend.model.Rating;
 import com.FBLA.WebCodingDev26Backend.repository.CaseMessageRepository;
 import com.FBLA.WebCodingDev26Backend.repository.ClaimRepository;
@@ -224,7 +223,6 @@ public class ClaimController {
         // Also add to FoundItem's ratings array
         if (foundItems != null && claim.getFoundItemId() != null) {
             foundItems.findById(claim.getFoundItemId()).ifPresent(item -> {
-                AppUser user = authorizationService.currentUser(userEmail);
                 Rating rating = new Rating();
                 rating.setClaimId(id);
                 rating.setRating(ratingInt);
