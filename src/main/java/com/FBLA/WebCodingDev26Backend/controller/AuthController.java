@@ -43,7 +43,19 @@ public class AuthController {
     }
 
     @GetMapping("/user")
-    public ResponseEntity<?> user(@RequestParam(required = false) String email) {
+    public ResponseEntity<?> user(
+            @RequestParam(required = false) String email,
+            @RequestHeader(value = "X-Demo-User-Email", required = false) String callerHeader) {
+        // An account record (with role/PII) may only be looked up by the user
+        // themselves or by staff/admin — prevents account enumeration / PII disclosure.
+        String requested = email == null ? "" : email.trim().toLowerCase();
+        if (!authorizationService.isStaffOrAdmin(callerHeader)) {
+            String caller = authorizationService.resolveEmail(callerHeader);
+            if (caller == null || caller.isBlank() || !caller.equalsIgnoreCase(requested)) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .contentType(MediaType.APPLICATION_JSON).body("null");
+            }
+        }
         return service.findByEmail(email)
                 .<ResponseEntity<?>>map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body("null"));

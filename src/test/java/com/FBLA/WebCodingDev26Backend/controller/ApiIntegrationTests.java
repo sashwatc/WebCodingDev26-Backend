@@ -379,6 +379,9 @@ class ApiIntegrationTests {
         when(authService.signIn(any(SignInRequest.class))).thenReturn(student, updatedStudent, admin);
         when(authService.findByEmail("riley.chen@pleasantvalley.edu")).thenReturn(Optional.of(updatedStudent));
         when(authService.findByEmail("missing@pleasantvalley.edu")).thenReturn(Optional.empty());
+        // A user may look up their own account; the resolved caller must match the requested email.
+        when(authorizationService.resolveEmail("riley.chen@pleasantvalley.edu")).thenReturn("riley.chen@pleasantvalley.edu");
+        when(authorizationService.resolveEmail("missing@pleasantvalley.edu")).thenReturn("missing@pleasantvalley.edu");
 
         mockMvc.perform(post("/api/auth/signin")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -394,9 +397,16 @@ class ApiIntegrationTests {
                 .andExpect(jsonPath("$.full_name").value("Riley C."));
 
         mockMvc.perform(get("/api/auth/user")
-                        .param("email", "riley.chen@pleasantvalley.edu"))
+                        .param("email", "riley.chen@pleasantvalley.edu")
+                        .header("X-Demo-User-Email", "riley.chen@pleasantvalley.edu"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.full_name").value("Riley C."));
+
+        // Looking up another user's account without staff/admin is now forbidden.
+        mockMvc.perform(get("/api/auth/user")
+                        .param("email", "avery.patel@pleasantvalley.edu")
+                        .header("X-Demo-User-Email", "riley.chen@pleasantvalley.edu"))
+                .andExpect(status().isForbidden());
 
         mockMvc.perform(post("/api/auth/signin")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -405,7 +415,8 @@ class ApiIntegrationTests {
                 .andExpect(jsonPath("$.role").value("admin"));
 
         mockMvc.perform(get("/api/auth/user")
-                        .param("email", "missing@pleasantvalley.edu"))
+                        .param("email", "missing@pleasantvalley.edu")
+                        .header("X-Demo-User-Email", "missing@pleasantvalley.edu"))
                 .andExpect(status().isOk())
                 .andExpect(content().string("null"));
     }
