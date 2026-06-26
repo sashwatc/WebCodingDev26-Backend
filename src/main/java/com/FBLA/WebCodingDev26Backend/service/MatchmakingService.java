@@ -80,14 +80,93 @@ public class MatchmakingService {
         return typedMatches(report);
     }
 
+    /** Decisions an admin can record on a suggested match. */
+    private static final Set<String> MATCH_DECISIONS = Set.of("confirmed", "rejected", "linked");
+
+    private static boolean isDecided(String status) {
+        if (status == null) {
+            return false;
+        }
+        return MATCH_DECISIONS.contains(status.trim().toLowerCase(Locale.ROOT));
+    }
+
+    /**
+     * Records an admin decision (confirmed / rejected / linked) on a single match
+     * of a lost report and persists it directly, without recomputing matches (a
+     * recompute would reset every match back to "suggested").
+     */
+    public LostReport decideMatch(String lostReportId, String foundItemId, String decision) {
+        LostReport report = lostReports.findById(lostReportId)
+                .orElseThrow(() -> new NotFoundException("Lost report not found"));
+        boolean matched = false;
+        for (Object value : report.getMatchedItems()) {
+            if (value instanceof MatchSuggestion suggestion && foundItemId.equals(suggestion.getFoundItemId())) {
+                suggestion.setStatus(decision);
+                suggestion.setUpdatedDate(clock.now());
+                matched = true;
+            } else if (value instanceof Map<?, ?> rawMatch) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> map = (Map<String, Object>) rawMatch;
+                Object fid = map.containsKey("found_item_id") ? map.get("found_item_id") : map.get("foundItemId");
+                if (foundItemId.equals(String.valueOf(fid))) {
+                    map.put("status", decision);
+                    matched = true;
+                }
+            }
+        }
+        if (!matched) {
+            throw new NotFoundException("Match not found for this lost report.");
+        }
+        // "Link Items" confirms these are the same item — establish a real link by
+        // pointing the found item at this lost report.
+        if ("linked".equals(decision)) {
+            foundItems.findById(foundItemId).ifPresent(item -> {
+                item.setLinkedLostReportId(lostReportId);
+                item.setUpdatedDate(clock.now());
+                foundItems.save(item);
+            });
+        }
+        report.setUpdatedDate(clock.now());
+        return lostReports.save(report);
+    }
+
+    /** Carries any prior admin decision onto a freshly recomputed match set. */
+    private void preserveDecisions(List<MatchSuggestion> previous, List<MatchSuggestion> incoming) {
+        Map<String, MatchSuggestion> decided = new LinkedHashMap<>();
+        for (MatchSuggestion match : previous) {
+            if (match.getFoundItemId() != null && isDecided(match.getStatus())) {
+                decided.put(match.getFoundItemId(), match);
+            }
+        }
+        if (decided.isEmpty()) {
+            return;
+        }
+        Set<String> incomingIds = new LinkedHashSet<>();
+        for (MatchSuggestion match : incoming) {
+            incomingIds.add(match.getFoundItemId());
+            MatchSuggestion prior = decided.get(match.getFoundItemId());
+            if (prior != null) {
+                match.setStatus(prior.getStatus());
+            }
+        }
+        // Keep decided matches the recompute dropped so a decision is never lost.
+        for (MatchSuggestion prior : decided.values()) {
+            if (!incomingIds.contains(prior.getFoundItemId())) {
+                incoming.add(prior);
+            }
+        }
+    }
+
     public List<MatchSuggestion> refreshMatchesForLostReport(String lostReportId) {
         LostReport report = lostReports.findById(lostReportId)
                 .orElseThrow(() -> new NotFoundException("Lost report not found"));
-        Set<String> previousStrongMatches = strongMatchIds(typedMatches(report));
+        List<MatchSuggestion> previousMatches = typedMatches(report);
+        Set<String> previousStrongMatches = strongMatchIds(previousMatches);
         List<FoundItem> candidates = foundItems.findAll().stream()
                 .filter(this::eligibleFoundItem)
                 .toList();
-        List<MatchSuggestion> matches = buildMatches(report, candidates);
+        List<MatchSuggestion> matches = new ArrayList<>(buildMatches(report, candidates));
+        preserveDecisions(previousMatches, matches);
         report.setMatchedItems(new ArrayList<>(matches));
         markMatchedIfActive(report, matches);
         report.setUpdatedDate(clock.now());
@@ -224,7 +303,13 @@ public class MatchmakingService {
                 merged.put(existing.getFoundItemId(), existing);
             }
         }
-        incomingMatches.forEach(match -> merged.put(match.getFoundItemId(), match));
+        incomingMatches.forEach(match -> {
+            MatchSuggestion existing = merged.get(match.getFoundItemId());
+            if (existing != null && isDecided(existing.getStatus())) {
+                match.setStatus(existing.getStatus());
+            }
+            merged.put(match.getFoundItemId(), match);
+        });
         report.setMatchedItems(new ArrayList<>(merged.values()));
     }
 

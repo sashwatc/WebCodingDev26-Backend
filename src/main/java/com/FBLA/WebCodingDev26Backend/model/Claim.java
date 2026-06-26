@@ -30,6 +30,7 @@ public class Claim {
     private String reviewedBy;
     private String reviewedAt;
     private String receivedConfirmedAt;
+    private String returnPassId;
     private List<String> evidenceChecklist = new ArrayList<>();
     private Map<String, String> privateEvidenceResponses = new LinkedHashMap<>();
     private String verificationSummary;
@@ -82,6 +83,8 @@ public class Claim {
     public void setReviewedAt(String reviewedAt) { this.reviewedAt = reviewedAt; }
     public String getReceivedConfirmedAt() { return receivedConfirmedAt; }
     public void setReceivedConfirmedAt(String receivedConfirmedAt) { this.receivedConfirmedAt = receivedConfirmedAt; }
+    public String getReturnPassId() { return returnPassId; }
+    public void setReturnPassId(String returnPassId) { this.returnPassId = returnPassId; }
     public List<String> getEvidenceChecklist() { return evidenceChecklist; }
     public void setEvidenceChecklist(List<String> evidenceChecklist) { this.evidenceChecklist = evidenceChecklist == null ? new ArrayList<>() : evidenceChecklist; }
     public Map<String, String> getPrivateEvidenceResponses() { return privateEvidenceResponses; }

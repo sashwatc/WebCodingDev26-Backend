@@ -4,6 +4,7 @@ import com.FBLA.WebCodingDev26Backend.model.AppUser;
 import com.FBLA.WebCodingDev26Backend.model.AuditLog;
 import com.FBLA.WebCodingDev26Backend.model.Claim;
 import com.FBLA.WebCodingDev26Backend.model.FoundItem;
+import com.FBLA.WebCodingDev26Backend.model.LostReport;
 import com.FBLA.WebCodingDev26Backend.model.Notification;
 import com.FBLA.WebCodingDev26Backend.exception.BadRequestException;
 import com.FBLA.WebCodingDev26Backend.exception.NotFoundException;
@@ -12,6 +13,7 @@ import com.FBLA.WebCodingDev26Backend.repository.FoundItemRepository;
 import com.FBLA.WebCodingDev26Backend.service.AdminWorkflowService;
 import com.FBLA.WebCodingDev26Backend.service.ClockService;
 import com.FBLA.WebCodingDev26Backend.service.DemoAuthorizationService;
+import com.FBLA.WebCodingDev26Backend.service.MatchmakingService;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,13 +35,15 @@ public class AdminDashboardController {
     private final AppUserRepository userRepository;
     private final FoundItemRepository foundItemRepository;
     private final ClockService clock;
+    private final MatchmakingService matchmakingService;
 
-    public AdminDashboardController(AdminWorkflowService workflow, DemoAuthorizationService authorizationService, AppUserRepository userRepository, FoundItemRepository foundItemRepository, ClockService clock) {
+    public AdminDashboardController(AdminWorkflowService workflow, DemoAuthorizationService authorizationService, AppUserRepository userRepository, FoundItemRepository foundItemRepository, ClockService clock, MatchmakingService matchmakingService) {
         this.workflow = workflow;
         this.authorizationService = authorizationService;
         this.userRepository = userRepository;
         this.foundItemRepository = foundItemRepository;
         this.clock = clock;
+        this.matchmakingService = matchmakingService;
     }
 
     @GetMapping("/dashboard")
@@ -134,6 +138,21 @@ public class AdminDashboardController {
         user.setRole(role);
         user.setUpdatedDate(clock.now());
         return userRepository.save(user);
+    }
+
+    @PatchMapping("/lost-reports/{reportId}/matches/{foundItemId}")
+    public LostReport decideLostReportMatch(
+            @PathVariable String reportId,
+            @PathVariable String foundItemId,
+            @RequestBody Map<String, Object> body,
+            @RequestHeader(value = "X-Demo-User-Email", required = false) String userEmail
+    ) {
+        authorizationService.requireStaffOrAdmin(userEmail);
+        String decision = body.get("decision") != null ? String.valueOf(body.get("decision")).trim().toLowerCase() : "";
+        if (!List.of("confirmed", "rejected", "linked").contains(decision)) {
+            throw new BadRequestException("Decision must be confirmed, rejected, or linked.");
+        }
+        return matchmakingService.decideMatch(reportId, foundItemId, decision);
     }
 
     @GetMapping("/audit")

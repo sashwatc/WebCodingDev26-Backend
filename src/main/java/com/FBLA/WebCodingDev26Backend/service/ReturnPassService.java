@@ -117,6 +117,12 @@ public class ReturnPassService {
         // Restore code so the caller receives it exactly once at issuance
         saved.setOneTimeCode(codeForClient);
 
+        // Link the claim to its pass so user-facing views can surface the pickup
+        // pass/approval status directly (by claim id) without relying on notifications.
+        claim.setReturnPassId(saved.getId());
+        claim.setUpdatedDate(now);
+        claims.save(claim);
+
         custodyLedgerService.appendEvent(item.getId(), "pickup_ready", admin.getEmail(), admin.getRole(), pass.getPickupLocation(), "Return Pass issued for approved claim.", null);
         recoveryCaseService.markPickupReady(claim.getId(), item.getId());
         if (recoveryPulse != null) {

@@ -102,6 +102,11 @@ public class AdminWorkflowService {
         foundItems.save(item);
 
         emailNotifications.sendClaimApproved(savedClaim, item);
+
+        // Note: the claim code (return pass) is issued as an explicit, separate
+        // admin step after approval — see ReturnPassService.create — so issuance
+        // remains a deliberate action rather than an automatic side effect.
+
         audit("CLAIM_APPROVED", "Claim", savedClaim.getId(), admin.getEmail(),
                 "Approved claim for found item " + item.getId() + ".",
                 admin.getRole() + " approved " + savedClaim.getClaimantName() + "'s claim for " + item.getTitle());
