@@ -3,11 +3,13 @@ package com.FBLA.WebCodingDev26Backend.service;
 import com.FBLA.WebCodingDev26Backend.exception.NotFoundException;
 import com.FBLA.WebCodingDev26Backend.model.AppUser;
 import com.FBLA.WebCodingDev26Backend.model.AuditLog;
+import com.FBLA.WebCodingDev26Backend.model.CaseMessage;
 import com.FBLA.WebCodingDev26Backend.model.Claim;
 import com.FBLA.WebCodingDev26Backend.model.FoundItem;
 import com.FBLA.WebCodingDev26Backend.model.ItemStatus;
 import com.FBLA.WebCodingDev26Backend.model.Notification;
 import com.FBLA.WebCodingDev26Backend.repository.AuditLogRepository;
+import com.FBLA.WebCodingDev26Backend.repository.CaseMessageRepository;
 import com.FBLA.WebCodingDev26Backend.repository.ClaimRepository;
 import com.FBLA.WebCodingDev26Backend.repository.FoundItemRepository;
 import com.FBLA.WebCodingDev26Backend.repository.LostReportRepository;
@@ -24,6 +26,7 @@ public class AdminWorkflowService {
     private final FoundItemRepository foundItems;
     private final LostReportRepository lostReports;
     private final ClaimRepository claims;
+    private final CaseMessageRepository caseMessages;
     private final AuditLogRepository auditLogs;
     private final NotificationRepository notifications;
     private final EmailNotificationService emailNotifications;
@@ -34,6 +37,7 @@ public class AdminWorkflowService {
             FoundItemRepository foundItems,
             LostReportRepository lostReports,
             ClaimRepository claims,
+            CaseMessageRepository caseMessages,
             AuditLogRepository auditLogs,
             NotificationRepository notifications,
             EmailNotificationService emailNotifications,
@@ -43,6 +47,7 @@ public class AdminWorkflowService {
         this.foundItems = foundItems;
         this.lostReports = lostReports;
         this.claims = claims;
+        this.caseMessages = caseMessages;
         this.auditLogs = auditLogs;
         this.notifications = notifications;
         this.emailNotifications = emailNotifications;
@@ -165,6 +170,15 @@ public class AdminWorkflowService {
         claim.setAdminNotes(noteFrom(data, "Admin requested additional information."));
         claim.setUpdatedDate(now);
         Claim saved = claims.save(claim);
+        // Surface the request in the claim's case-message thread so the claimant sees it.
+        CaseMessage note = new CaseMessage();
+        note.setId("msg_" + UUID.randomUUID().toString().replace("-", "").substring(0, 10));
+        note.setClaimId(saved.getId());
+        note.setSenderId(admin.getEmail());
+        note.setSenderRole("staff");
+        note.setMessage(saved.getAdminNotes());
+        note.setCreatedAt(now);
+        caseMessages.save(note);
         audit("CLAIM_MORE_INFO", "Claim", saved.getId(), admin.getEmail(), saved.getAdminNotes(),
                 admin.getRole() + " requested more information for " + saved.getClaimantName() + "'s claim for item " + saved.getFoundItemId());
         return saved;

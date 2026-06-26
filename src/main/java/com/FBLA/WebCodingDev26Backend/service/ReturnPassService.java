@@ -104,18 +104,16 @@ public class ReturnPassService {
         pass.setStatus("active");
         String plainCode = generateCode();
         pass.setPinHash(bcrypt.encode(plainCode));
-        pass.setOneTimeCode(plainCode); // stored temporarily; cleared before persistence
+        pass.setOneTimeCode(plainCode); // persisted so the claimant can read it via the access-controlled GET
         pass.setToken(generateToken());
         pass.setExpiresAt(Instant.parse(now).plus(2, ChronoUnit.DAYS).toString());
         pass.setCreatedDate(now);
         pass.setUpdatedDate(now);
         pass.setIsDemo(Boolean.TRUE.equals(claim.getIsDemo()) || Boolean.TRUE.equals(item.getIsDemo()));
-        // Clear plaintext before saving — only hash persists
-        String codeForClient = pass.getOneTimeCode();
-        pass.setOneTimeCode(null);
+        // Persist the plaintext one-time code (alongside the bcrypt pinHash) so the
+        // claimant can retrieve it later via the access-controlled GET — the Pickup Pass
+        // page renders the code/QR from that GET, not from this create response.
         ReturnPass saved = returnPasses.save(pass);
-        // Restore code so the caller receives it exactly once at issuance
-        saved.setOneTimeCode(codeForClient);
 
         // Link the claim to its pass so user-facing views can surface the pickup
         // pass/approval status directly (by claim id) without relying on notifications.
