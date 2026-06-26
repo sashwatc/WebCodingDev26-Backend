@@ -17,13 +17,18 @@ public class CorsConfig implements WebMvcConfigurer {
 
     @Override
     public void addCorsMappings(CorsRegistry registry) {
-        List<String> origins = new ArrayList<>(List.of("http://localhost:5173", "http://localhost:4173"));
+        // Allow any local dev port (5173, 5174, 5180, …) so multiple frontend
+        // instances can talk to this backend without editing this list each time.
+        List<String> originPatterns = new ArrayList<>(List.of(
+                "http://localhost:*",
+                "http://127.0.0.1:*"
+        ));
         if (frontendUrl != null && !frontendUrl.isBlank()) {
-            origins.add(frontendUrl);
+            originPatterns.add(frontendUrl);
         }
 
         registry.addMapping("/api/**")
-                .allowedOrigins(origins.toArray(String[]::new))
+                .allowedOriginPatterns(originPatterns.toArray(String[]::new))
                 .allowedMethods("GET", "POST", "PATCH", "DELETE", "OPTIONS")
                 .allowedHeaders("*");
     }

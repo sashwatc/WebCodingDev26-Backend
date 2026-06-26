@@ -5,15 +5,19 @@ import com.FBLA.WebCodingDev26Backend.model.AuditLog;
 import com.FBLA.WebCodingDev26Backend.model.Claim;
 import com.FBLA.WebCodingDev26Backend.model.FoundItem;
 import com.FBLA.WebCodingDev26Backend.model.Notification;
+import com.FBLA.WebCodingDev26Backend.exception.BadRequestException;
+import com.FBLA.WebCodingDev26Backend.exception.NotFoundException;
 import com.FBLA.WebCodingDev26Backend.repository.AppUserRepository;
 import com.FBLA.WebCodingDev26Backend.repository.FoundItemRepository;
 import com.FBLA.WebCodingDev26Backend.service.AdminWorkflowService;
+import com.FBLA.WebCodingDev26Backend.service.ClockService;
 import com.FBLA.WebCodingDev26Backend.service.DemoAuthorizationService;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -28,12 +32,14 @@ public class AdminDashboardController {
     private final DemoAuthorizationService authorizationService;
     private final AppUserRepository userRepository;
     private final FoundItemRepository foundItemRepository;
+    private final ClockService clock;
 
-    public AdminDashboardController(AdminWorkflowService workflow, DemoAuthorizationService authorizationService, AppUserRepository userRepository, FoundItemRepository foundItemRepository) {
+    public AdminDashboardController(AdminWorkflowService workflow, DemoAuthorizationService authorizationService, AppUserRepository userRepository, FoundItemRepository foundItemRepository, ClockService clock) {
         this.workflow = workflow;
         this.authorizationService = authorizationService;
         this.userRepository = userRepository;
         this.foundItemRepository = foundItemRepository;
+        this.clock = clock;
     }
 
     @GetMapping("/dashboard")
@@ -110,6 +116,24 @@ public class AdminDashboardController {
     public List<AppUser> users(@RequestHeader(value = "X-Demo-User-Email", required = false) String userEmail) {
         authorizationService.requireAdmin(userEmail);
         return userRepository.findAll();
+    }
+
+    @PatchMapping("/users/{id}/role")
+    public AppUser updateUserRole(
+            @PathVariable String id,
+            @RequestBody Map<String, Object> body,
+            @RequestHeader(value = "X-Demo-User-Email", required = false) String userEmail
+    ) {
+        authorizationService.requireAdmin(userEmail);
+        String role = body.get("role") != null ? String.valueOf(body.get("role")).trim().toLowerCase() : "";
+        if (!List.of("student", "staff", "admin", "suspended").contains(role)) {
+            throw new BadRequestException("Invalid role.");
+        }
+        AppUser user = userRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("User not found."));
+        user.setRole(role);
+        user.setUpdatedDate(clock.now());
+        return userRepository.save(user);
     }
 
     @GetMapping("/audit")
