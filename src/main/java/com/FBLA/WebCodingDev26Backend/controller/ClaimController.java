@@ -193,9 +193,13 @@ public class ClaimController {
         }
         String review = data.get("review") != null ? String.valueOf(data.get("review")).trim() : null;
 
+        String now = Instant.now().toString();
         claim.setClaimantRating(ratingInt);
         claim.setClaimantReview(review);
-        claim.setUpdatedDate(Instant.now().toString());
+        // Submitted reviews enter the staff moderation queue as "pending".
+        claim.setReviewStatus("pending");
+        claim.setReviewSubmittedAt(now);
+        claim.setUpdatedDate(now);
         Claim saved = claims.save(claim);
 
         // Also add to FoundItem's ratings array
