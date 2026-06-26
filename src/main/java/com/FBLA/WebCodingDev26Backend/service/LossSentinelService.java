@@ -7,8 +7,6 @@ import com.FBLA.WebCodingDev26Backend.mapper.PatchMapper;
 import com.FBLA.WebCodingDev26Backend.model.AuditLog;
 import com.FBLA.WebCodingDev26Backend.model.LostReport;
 import com.FBLA.WebCodingDev26Backend.model.PreventionAlert;
-import com.FBLA.WebCodingDev26Backend.model.RecoveryCase;
-import com.FBLA.WebCodingDev26Backend.model.RecoveryMission;
 import com.FBLA.WebCodingDev26Backend.repository.AuditLogRepository;
 import com.FBLA.WebCodingDev26Backend.repository.CampusZoneRepository;
 import com.FBLA.WebCodingDev26Backend.repository.LostReportRepository;
@@ -254,28 +252,6 @@ public class LossSentinelService {
                 .map(lostReports::findById)
                 .flatMap(Optional::stream)
                 .toList();
-    }
-
-    public RecoveryMission createMissionFromAlert(String id, String adminEmail) {
-        if (recoveryCaseService == null) {
-            throw new BadRequestException("Recovery Mission creation is unavailable in this runtime.");
-        }
-        PreventionAlert alert = alerts.findById(id).orElseThrow(() -> new NotFoundException("Prevention alert not found"));
-        LostReport source = firstSourceReport(alert);
-        RecoveryCase recoveryCase = recoveryCaseService.ensureForLostReport(source);
-        RecoveryMission mission = recoveryCaseService.createMission(recoveryCase.getId(), Map.of(
-                "title", "Pattern Review: " + valueOrDefault(alert.getCategory(), "lost item") + " in " + valueOrDefault(alert.getCampusZoneId(), "campus zone"),
-                "campus_zone_id", valueOrDefault(alert.getCampusZoneId(), valueOrDefault(source.getCampusZoneId(), "unknown")),
-                "zone_label", valueOrDefault(alert.getCampusZoneId(), "Campus zone"),
-                "recommended_action", String.join(" ", alert.getSuggestedActions()),
-                "reasons", alert.getReasons(),
-                "priority", "high".equalsIgnoreCase(alert.getSeverity()) ? "high" : "medium",
-                "status", "open",
-                "source_alert_id", alert.getId()
-        ), adminEmail);
-        audit("PATTERN_REVIEW_MISSION_CREATED", "RecoveryMission", mission.getId(), adminEmail,
-                "Created mission from Pattern Review alert " + alert.getId() + ".");
-        return mission;
     }
 
     private PreventionAlert transition(String id, String status, String adminEmail, String note) {

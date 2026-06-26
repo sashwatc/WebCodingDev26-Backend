@@ -129,6 +129,31 @@ public class AppwriteAuthService {
         }
     }
 
+    /**
+     * Triggers Appwrite's password recovery flow for the given email.
+     * This is a best-effort call — failures are logged but not propagated.
+     */
+    public void triggerPasswordRecovery(String email) {
+        if (!isConfigured() || email == null || email.isBlank()) {
+            return;
+        }
+        try {
+            String json = "{\"email\":\"" + email.replace("\"", "") + "\",\"url\":\"" + endpoint + "/recovery\"}";
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(endpoint + "/account/recovery"))
+                    .timeout(Duration.ofSeconds(6))
+                    .header("X-Appwrite-Project", projectId)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(json))
+                    .build();
+            httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+        } catch (RuntimeException | java.io.IOException exception) {
+            LOGGER.warn("Password recovery trigger failed: {}", exception.getClass().getSimpleName());
+        }
+    }
+
     private HttpRequest accountRequest(String path, String jwt) {
         return HttpRequest.newBuilder()
                 .uri(URI.create(endpoint + path))

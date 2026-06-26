@@ -31,7 +31,7 @@ public class AppUser {
     public void setFullName(String fullName) { this.fullName = fullName; }
     public String getEmail() { return email; }
     public void setEmail(String email) { this.email = email; }
-    public String getRole() { return role; }
+    public String getRole() { return (role == null || role.isBlank()) ? "student" : role; }
     public void setRole(String role) { this.role = role; }
     public String getAppwriteUserId() { return appwriteUserId; }
     public void setAppwriteUserId(String appwriteUserId) { this.appwriteUserId = appwriteUserId; }

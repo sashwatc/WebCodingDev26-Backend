@@ -70,6 +70,28 @@ public class DemoAuthorizationService {
         return !resolved.invalidSession() && resolved.user() != null && resolved.admin();
     }
 
+    public AppUser requireStaffOrAdmin(String demoEmailHeader) {
+        Resolved resolved = resolveCached(demoEmailHeader);
+        if (resolved.invalidSession()) {
+            throw new ForbiddenException("Your session is invalid or has expired. Sign in again.");
+        }
+        if (resolved.user() == null) {
+            throw new ForbiddenException("Staff or admin access is required.");
+        }
+        String role = resolved.user().getRole();
+        if (!"admin".equalsIgnoreCase(role) && !"staff".equalsIgnoreCase(role)) {
+            throw new ForbiddenException("Staff or admin access is required.");
+        }
+        return resolved.user();
+    }
+
+    public boolean isStaffOrAdmin(String demoEmailHeader) {
+        Resolved resolved = resolveCached(demoEmailHeader);
+        if (resolved.invalidSession() || resolved.user() == null) return false;
+        String role = resolved.user().getRole();
+        return "admin".equalsIgnoreCase(role) || "staff".equalsIgnoreCase(role);
+    }
+
     /** Returns the resolved backend user for the current request, or null when unauthenticated. */
     public AppUser currentUser(String demoEmailHeader) {
         Resolved resolved = resolveCached(demoEmailHeader);

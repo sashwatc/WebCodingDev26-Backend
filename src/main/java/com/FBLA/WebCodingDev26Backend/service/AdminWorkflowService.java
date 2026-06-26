@@ -103,7 +103,8 @@ public class AdminWorkflowService {
 
         emailNotifications.sendClaimApproved(savedClaim, item);
         audit("CLAIM_APPROVED", "Claim", savedClaim.getId(), admin.getEmail(),
-                "Approved claim for found item " + item.getId() + ".");
+                "Approved claim for found item " + item.getId() + ".",
+                admin.getRole() + " approved " + savedClaim.getClaimantName() + "'s claim for " + item.getTitle());
         return savedClaim;
     }
 
@@ -130,7 +131,8 @@ public class AdminWorkflowService {
 
         emailNotifications.sendClaimDenied(savedClaim, item);
         audit("CLAIM_DENIED", "Claim", savedClaim.getId(), admin.getEmail(),
-                "Denied claim for found item " + item.getId() + ".");
+                "Denied claim for found item " + item.getId() + ".",
+                admin.getRole() + " denied " + savedClaim.getClaimantName() + "'s claim for " + item.getTitle());
         return savedClaim;
     }
 
@@ -139,7 +141,8 @@ public class AdminWorkflowService {
         item.setStatus(ItemStatus.ARCHIVED);
         item.setUpdatedDate(clock.now());
         FoundItem saved = foundItems.save(item);
-        audit("ITEM_ARCHIVED", "FoundItem", saved.getId(), admin.getEmail(), noteFrom(data, "Archived resolved found item."));
+        audit("ITEM_ARCHIVED", "FoundItem", saved.getId(), admin.getEmail(), noteFrom(data, "Archived resolved found item."),
+                admin.getRole() + " archived item " + saved.getTitle());
         return saved;
     }
 
@@ -156,7 +159,10 @@ public class AdminWorkflowService {
         claim.setReviewedAt(now);
         claim.setAdminNotes(noteFrom(data, "Admin requested additional information."));
         claim.setUpdatedDate(now);
-        return claims.save(claim);
+        Claim saved = claims.save(claim);
+        audit("CLAIM_MORE_INFO", "Claim", saved.getId(), admin.getEmail(), saved.getAdminNotes(),
+                admin.getRole() + " requested more information for " + saved.getClaimantName() + "'s claim for item " + saved.getFoundItemId());
+        return saved;
     }
 
     private String noteFrom(Map<String, Object> data, String fallback) {
@@ -169,6 +175,10 @@ public class AdminWorkflowService {
     }
 
     private void audit(String action, String entityType, String entityId, String performedBy, String details) {
+        audit(action, entityType, entityId, performedBy, details, null);
+    }
+
+    private void audit(String action, String entityType, String entityId, String performedBy, String details, String humanReadableMessage) {
         AuditLog log = new AuditLog();
         log.setId("audit_" + UUID.randomUUID().toString().replace("-", "").substring(0, 10));
         log.setAction(action);
@@ -176,6 +186,7 @@ public class AdminWorkflowService {
         log.setEntityId(entityId);
         log.setPerformedBy(performedBy);
         log.setDetails(details);
+        log.setHumanReadableMessage(humanReadableMessage);
         log.setCreatedDate(clock.now());
         auditLogs.save(log);
     }

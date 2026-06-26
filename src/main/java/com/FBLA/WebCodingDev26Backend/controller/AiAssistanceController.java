@@ -21,8 +21,18 @@ public class AiAssistanceController {
         return service.suggestFoundItemFields(input);
     }
 
+    @PostMapping("/suggest-fields")
+    public Map<String, Object> suggestFields(@RequestBody Map<String, Object> input) {
+        return service.suggestFoundItemFields(input);
+    }
+
     @PostMapping("/search")
     public Map<String, Object> parseSearchQuery(@RequestBody Map<String, Object> input) {
+        return service.parseSearchQuery(input);
+    }
+
+    @PostMapping("/parse-search")
+    public Map<String, Object> parseSearch(@RequestBody Map<String, Object> input) {
         return service.parseSearchQuery(input);
     }
 }

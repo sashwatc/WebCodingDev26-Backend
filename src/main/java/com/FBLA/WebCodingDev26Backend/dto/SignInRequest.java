@@ -4,7 +4,7 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 
 public class SignInRequest {
-    @NotBlank(message = "Full name is required.")
+    // fullName is optional on sign-in; existing stored name is preserved when omitted
     private String fullName;
 
     @Email(message = "Enter a valid email address.")

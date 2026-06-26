@@ -25,6 +25,7 @@ import java.util.Base64;
 import java.util.Locale;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -37,6 +38,7 @@ public class ReturnPassService {
     private final ClockService clock;
     private final RecoveryPulseDispatcher recoveryPulse;
     private final SecureRandom random = new SecureRandom();
+    private final BCryptPasswordEncoder bcrypt = new BCryptPasswordEncoder();
 
     public ReturnPassService(
             ReturnPassRepository returnPasses,
@@ -100,13 +102,20 @@ public class ReturnPassService {
         pass.setPickupWindow(valueOrDefault(request.pickupWindow(), "Next school day during office hours"));
         pass.setPickupLocation(valueOrDefault(request.pickupLocation(), "PVHS Main Office pickup station"));
         pass.setStatus("active");
-        pass.setOneTimeCode(generateCode());
+        String plainCode = generateCode();
+        pass.setPinHash(bcrypt.encode(plainCode));
+        pass.setOneTimeCode(plainCode); // stored temporarily; cleared before persistence
         pass.setToken(generateToken());
         pass.setExpiresAt(Instant.parse(now).plus(2, ChronoUnit.DAYS).toString());
         pass.setCreatedDate(now);
         pass.setUpdatedDate(now);
         pass.setIsDemo(Boolean.TRUE.equals(claim.getIsDemo()) || Boolean.TRUE.equals(item.getIsDemo()));
+        // Clear plaintext before saving — only hash persists
+        String codeForClient = pass.getOneTimeCode();
+        pass.setOneTimeCode(null);
         ReturnPass saved = returnPasses.save(pass);
+        // Restore code so the caller receives it exactly once at issuance
+        saved.setOneTimeCode(codeForClient);
 
         custodyLedgerService.appendEvent(item.getId(), "pickup_ready", admin.getEmail(), admin.getRole(), pass.getPickupLocation(), "Return Pass issued for approved claim.", null);
         recoveryCaseService.markPickupReady(claim.getId(), item.getId());
@@ -130,7 +139,9 @@ public class ReturnPassService {
     }
 
     public ReturnPassVerifyResponse verify(ReturnPassVerifyRequest request) {
-        ReturnPass pass = returnPasses.findByOneTimeCode(request.oneTimeCode().trim())
+        String code = request.oneTimeCode().trim();
+        // Try hash-based lookup first; fall back to legacy plaintext for seeded demo data
+        ReturnPass pass = findByCode(code)
                 .orElseThrow(() -> new NotFoundException("Return Pass not found"));
         if (!"active".equalsIgnoreCase(pass.getStatus())) {
             return new ReturnPassVerifyResponse(false, pass.getId(), pass.getStatus(), "", "", "Return Pass is not active.");
@@ -143,7 +154,11 @@ public class ReturnPassService {
 
     public ReturnPassResponse redeem(String id, ReturnPassRedeemRequest request, AppUser admin) {
         ReturnPass pass = returnPasses.findById(id).orElseThrow(() -> new NotFoundException("Return Pass not found"));
-        if (!pass.getOneTimeCode().equals(request.oneTimeCode().trim())) {
+        String code = request.oneTimeCode().trim();
+        boolean codeMatches = (pass.getPinHash() != null)
+                ? bcrypt.matches(code, pass.getPinHash())
+                : code.equals(pass.getOneTimeCode()); // legacy plaintext fallback for seeded data
+        if (!codeMatches) {
             throw new BadRequestException("One-time code does not match this Return Pass.");
         }
         if (!"active".equalsIgnoreCase(pass.getStatus())) {
@@ -189,6 +204,13 @@ public class ReturnPassService {
         return ReturnPassResponse.from(saved);
     }
 
+    public ReturnPassResponse redeemByCode(ReturnPassRedeemRequest request, AppUser admin) {
+        String code = request.oneTimeCode().trim();
+        ReturnPass pass = findByCode(code)
+                .orElseThrow(() -> new NotFoundException("Return Pass not found for the provided code."));
+        return redeem(pass.getId(), request, admin);
+    }
+
     public ReturnPassResponse sendPickupReminder(String id, AppUser admin) {
         ReturnPass pass = returnPasses.findById(id).orElseThrow(() -> new NotFoundException("Return Pass not found"));
         if (!"active".equalsIgnoreCase(pass.getStatus())) {
@@ -198,6 +220,22 @@ public class ReturnPassService {
             recoveryPulse.pickupReminder(pass);
         }
         return ReturnPassResponse.from(pass);
+    }
+
+    /**
+     * Finds a ReturnPass by code using hash-based matching.
+     * Falls back to legacy plaintext lookup for seeded demo data that has no pinHash.
+     */
+    private java.util.Optional<ReturnPass> findByCode(String code) {
+        // Plaintext fallback for seeded demo data (no pinHash stored)
+        java.util.Optional<ReturnPass> byPlaintext = returnPasses.findByOneTimeCode(code);
+        if (byPlaintext.isPresent()) {
+            return byPlaintext;
+        }
+        // Hash-based scan for passes created after BCrypt migration
+        return returnPasses.findAll().stream()
+                .filter(p -> p.getPinHash() != null && bcrypt.matches(code, p.getPinHash()))
+                .findFirst();
     }
 
     private boolean isExpired(ReturnPass pass) {

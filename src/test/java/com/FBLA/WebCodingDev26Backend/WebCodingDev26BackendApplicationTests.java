@@ -6,17 +6,19 @@ import com.FBLA.WebCodingDev26Backend.repository.AuditLogRepository;
 import com.FBLA.WebCodingDev26Backend.repository.CampusZoneRepository;
 import com.FBLA.WebCodingDev26Backend.repository.ClaimRepository;
 import com.FBLA.WebCodingDev26Backend.repository.CustodyEventRepository;
-import com.FBLA.WebCodingDev26Backend.repository.EventRecoveryHubRepository;
+import com.FBLA.WebCodingDev26Backend.repository.CaseMessageRepository;
 import com.FBLA.WebCodingDev26Backend.repository.FoundItemRepository;
 import com.FBLA.WebCodingDev26Backend.repository.LostReportRepository;
 import com.FBLA.WebCodingDev26Backend.repository.NotificationDeliveryRepository;
 import com.FBLA.WebCodingDev26Backend.repository.NotificationRepository;
-import com.FBLA.WebCodingDev26Backend.repository.PartnerRelayRepository;
 import com.FBLA.WebCodingDev26Backend.repository.PreventionAlertRepository;
 import com.FBLA.WebCodingDev26Backend.repository.RecoveryCaseRepository;
-import com.FBLA.WebCodingDev26Backend.repository.RecoveryMissionRepository;
 import com.FBLA.WebCodingDev26Backend.repository.RecoveryNodeRepository;
 import com.FBLA.WebCodingDev26Backend.repository.ReturnPassRepository;
+import com.FBLA.WebCodingDev26Backend.repository.SavedSearchRepository;
+import com.FBLA.WebCodingDev26Backend.repository.SupportTicketRepository;
+import com.FBLA.WebCodingDev26Backend.repository.SystemSettingRepository;
+import com.FBLA.WebCodingDev26Backend.repository.WatchedItemRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.mongodb.core.MongoTemplate;
@@ -32,6 +34,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 class WebCodingDev26BackendApplicationTests {
 	@MockitoBean
 	private MongoTemplate mongoTemplate;
+	@MockitoBean
+	private CaseMessageRepository caseMessages;
 	@MockitoBean
 	private FoundItemRepository foundItems;
 	@MockitoBean
@@ -49,13 +53,9 @@ class WebCodingDev26BackendApplicationTests {
 	@MockitoBean
 	private CampusZoneRepository campusZones;
 	@MockitoBean
-	private EventRecoveryHubRepository eventHubs;
-	@MockitoBean
 	private AssetRegistryRecordRepository assetRecords;
 	@MockitoBean
 	private RecoveryCaseRepository recoveryCases;
-	@MockitoBean
-	private RecoveryMissionRepository recoveryMissions;
 	@MockitoBean
 	private CustodyEventRepository custodyEvents;
 	@MockitoBean
@@ -65,7 +65,13 @@ class WebCodingDev26BackendApplicationTests {
 	@MockitoBean
 	private RecoveryNodeRepository recoveryNodes;
 	@MockitoBean
-	private PartnerRelayRepository partnerRelays;
+	private SavedSearchRepository savedSearches;
+	@MockitoBean
+	private WatchedItemRepository watchedItems;
+	@MockitoBean
+	private SupportTicketRepository supportTickets;
+	@MockitoBean
+	private SystemSettingRepository systemSettings;
 
 	@Test
 	void contextLoads() {

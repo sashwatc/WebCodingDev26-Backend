@@ -1,8 +1,5 @@
 package com.FBLA.WebCodingDev26Backend.service;
 
-import com.FBLA.WebCodingDev26Backend.dto.RecoveryCaseListItem;
-import com.FBLA.WebCodingDev26Backend.dto.RecoveryCenterResponse;
-import com.FBLA.WebCodingDev26Backend.dto.RecoveryCenterSummary;
 import com.FBLA.WebCodingDev26Backend.exception.BadRequestException;
 import com.FBLA.WebCodingDev26Backend.exception.NotFoundException;
 import com.FBLA.WebCodingDev26Backend.mapper.PatchMapper;
@@ -11,19 +8,15 @@ import com.FBLA.WebCodingDev26Backend.model.Claim;
 import com.FBLA.WebCodingDev26Backend.model.LostReport;
 import com.FBLA.WebCodingDev26Backend.model.MatchSuggestion;
 import com.FBLA.WebCodingDev26Backend.model.RecoveryCase;
-import com.FBLA.WebCodingDev26Backend.model.RecoveryMission;
 import com.FBLA.WebCodingDev26Backend.repository.AuditLogRepository;
 import com.FBLA.WebCodingDev26Backend.repository.ClaimRepository;
 import com.FBLA.WebCodingDev26Backend.repository.LostReportRepository;
 import com.FBLA.WebCodingDev26Backend.repository.RecoveryCaseRepository;
-import com.FBLA.WebCodingDev26Backend.repository.RecoveryMissionRepository;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
@@ -46,16 +39,8 @@ public class RecoveryCaseService {
             "archived",
             "paused"
     );
-    private static final Set<String> MISSION_STATUSES = Set.of(
-            "open",
-            "assigned",
-            "checked",
-            "completed",
-            "canceled"
-    );
 
     private final RecoveryCaseRepository cases;
-    private final RecoveryMissionRepository missions;
     private final LostReportRepository lostReports;
     private final ClaimRepository claims;
     private final AuditLogRepository auditLogs;
@@ -67,18 +52,16 @@ public class RecoveryCaseService {
 
     public RecoveryCaseService(
             RecoveryCaseRepository cases,
-            RecoveryMissionRepository missions,
             LostReportRepository lostReports,
             RecoveryPlanningService planningService,
             PatchMapper mapper,
             ClockService clock
     ) {
-        this(cases, missions, lostReports, null, null, planningService, mapper, clock, new InputSanitizer(), null);
+        this(cases, lostReports, null, null, planningService, mapper, clock, new InputSanitizer(), null);
     }
 
     public RecoveryCaseService(
             RecoveryCaseRepository cases,
-            RecoveryMissionRepository missions,
             LostReportRepository lostReports,
             ClaimRepository claims,
             AuditLogRepository auditLogs,
@@ -87,13 +70,12 @@ public class RecoveryCaseService {
             ClockService clock,
             InputSanitizer sanitizer
     ) {
-        this(cases, missions, lostReports, claims, auditLogs, planningService, mapper, clock, sanitizer, null);
+        this(cases, lostReports, claims, auditLogs, planningService, mapper, clock, sanitizer, null);
     }
 
     @Autowired
     public RecoveryCaseService(
             RecoveryCaseRepository cases,
-            RecoveryMissionRepository missions,
             LostReportRepository lostReports,
             ClaimRepository claims,
             AuditLogRepository auditLogs,
@@ -104,7 +86,6 @@ public class RecoveryCaseService {
             RecoveryPulseDispatcher recoveryPulse
     ) {
         this.cases = cases;
-        this.missions = missions;
         this.lostReports = lostReports;
         this.claims = claims;
         this.auditLogs = auditLogs;
@@ -117,27 +98,6 @@ public class RecoveryCaseService {
 
     public List<RecoveryCase> list() {
         return cases.findAll();
-    }
-
-    public RecoveryCenterResponse center() {
-        List<RecoveryCase> allCases = cases.findAll();
-        List<RecoveryCaseListItem> caseItems = allCases.stream()
-                .map(this::caseListItem)
-                .toList();
-
-        long activeCases = allCases.stream().filter(this::isActiveCase).count();
-        long openMissions = allCases.stream()
-                .map(RecoveryCase::getId)
-                .flatMap(caseId -> missions.findByRecoveryCaseId(caseId).stream())
-                .filter(this::isOpenMission)
-                .count();
-        long claimsAwaitingReview = claims == null ? 0 : claims.findAll().stream().filter(this::isClaimAwaitingReview).count();
-        long pickupReadyCases = allCases.stream().filter(recoveryCase -> statusEquals(recoveryCase.getStatus(), "pickup_ready")).count();
-
-        return new RecoveryCenterResponse(
-                new RecoveryCenterSummary(activeCases, openMissions, claimsAwaitingReview, pickupReadyCases),
-                caseItems
-        );
     }
 
     public RecoveryCase get(String id) {
@@ -221,7 +181,6 @@ public class RecoveryCaseService {
         }
         recoveryCase.setUpdatedDate(clock.now());
         RecoveryCase saved = cases.save(recoveryCase);
-        upsertMissions(saved, recommendations);
         notifyCaseStatusChanged(saved, previousStatus);
         audit("RECOVERY_PLAN_REFRESHED", "RecoveryCase", saved.getId(), adminEmail,
                 "Refreshed deterministic recovery plan for lost report " + report.getId() + ".");
@@ -258,56 +217,6 @@ public class RecoveryCaseService {
         RecoveryCase saved = cases.save(existing);
         audit("RECOVERY_CASE_ASSIGNED", "RecoveryCase", saved.getId(), adminEmail,
                 "Assigned recovery case to " + assignedTo + ".");
-        return saved;
-    }
-
-    public List<RecoveryMission> missionsForCase(String caseId) {
-        get(caseId);
-        return missions.findByRecoveryCaseId(caseId);
-    }
-
-    public RecoveryMission createMission(String caseId, Map<String, Object> data, String adminEmail) {
-        RecoveryCase recoveryCase = get(caseId);
-        Map<String, Object> sanitized = sanitizer.sanitizeMap(data);
-        RecoveryMission mission = mapper.convert(sanitized, RecoveryMission.class);
-        String now = clock.now();
-        mission.setId(valueOrDefault(mission.getId(), "mission_" + shortId()));
-        mission.setRecoveryCaseId(recoveryCase.getId());
-        mission.setEventHubId(valueOrDefault(mission.getEventHubId(), recoveryCase.getEventHubId()));
-        mission.setCampusZoneId(valueOrDefault(mission.getCampusZoneId(), recoveryCase.getCampusZoneId()));
-        mission.setTitle(valueOrDefault(mission.getTitle(), "Review recovery lead"));
-        mission.setRecommendedAction(valueOrDefault(mission.getRecommendedAction(), "Staff should review this recovery lead and update the mission status."));
-        mission.setStatus(valueOrDefault(mission.getStatus(), "open"));
-        validateMissionStatus(mission.getStatus());
-        mission.setPriority(valueOrDefault(mission.getPriority(), "medium"));
-        mission.setIsDemo(Boolean.TRUE.equals(recoveryCase.getIsDemo()) || Boolean.TRUE.equals(mission.getIsDemo()));
-        mission.setCreatedDate(valueOrDefault(mission.getCreatedDate(), now));
-        mission.setUpdatedDate(now);
-        RecoveryMission saved = missions.save(mission);
-        notifyMissionAssigned(saved, null);
-        audit("RECOVERY_MISSION_CREATED", "RecoveryMission", saved.getId(), adminEmail,
-                "Created mission for recovery case " + recoveryCase.getId() + ".");
-        return saved;
-    }
-
-    public RecoveryMission updateMission(String id, Map<String, Object> data) {
-        return updateMission(id, data, null);
-    }
-
-    public RecoveryMission updateMission(String id, Map<String, Object> data, String adminEmail) {
-        RecoveryMission existing = missions.findById(id).orElseThrow(() -> new NotFoundException("Recovery mission not found"));
-        String previousAssignedTo = existing.getAssignedTo();
-        Map<String, Object> sanitized = sanitizer.sanitizeMap(data);
-        RecoveryMission patch = mapper.convert(sanitized, RecoveryMission.class);
-        mapper.copyPresent(sanitized, patch, existing, "id", "createdDate", "recoveryCaseId");
-        validateMissionStatus(existing.getStatus());
-        if (statusEquals(existing.getStatus(), "completed") && isBlank(existing.getCompletedDate())) {
-            existing.setCompletedDate(clock.now());
-        }
-        existing.setUpdatedDate(clock.now());
-        RecoveryMission saved = missions.save(existing);
-        notifyMissionAssigned(saved, previousAssignedTo);
-        audit("RECOVERY_MISSION_UPDATED", "RecoveryMission", saved.getId(), adminEmail, "Updated recovery mission.");
         return saved;
     }
 
@@ -361,46 +270,6 @@ public class RecoveryCaseService {
         }
     }
 
-    private void notifyMissionAssigned(RecoveryMission mission, String previousAssignedTo) {
-        if (recoveryPulse == null || isBlank(mission.getAssignedTo()) || normalize(mission.getAssignedTo()).equals(normalize(previousAssignedTo))) {
-            return;
-        }
-        try {
-            recoveryPulse.recoveryMissionAssigned(mission);
-        } catch (RuntimeException exception) {
-            LOGGER.warn("Unable to dispatch recovery mission notification for mission {}: {}", mission.getId(), exception.getMessage());
-        }
-    }
-
-    private void upsertMissions(RecoveryCase recoveryCase, List<RecoveryPlanningService.ZoneRecommendation> recommendations) {
-        Map<String, RecoveryMission> existingByZone = new LinkedHashMap<>();
-        for (RecoveryMission existing : missions.findByRecoveryCaseId(recoveryCase.getId())) {
-            existingByZone.put(existing.getCampusZoneId(), existing);
-        }
-
-        for (RecoveryPlanningService.ZoneRecommendation recommendation : recommendations) {
-            RecoveryMission mission = existingByZone.getOrDefault(recommendation.campusZoneId(), new RecoveryMission());
-            boolean isNew = mission.getId() == null;
-            if (isNew) {
-                mission.setId("mission_" + shortId());
-                mission.setRecoveryCaseId(recoveryCase.getId());
-                mission.setCreatedDate(clock.now());
-                mission.setStatus("open");
-                mission.setIsDemo(Boolean.TRUE.equals(recoveryCase.getIsDemo()));
-            }
-            mission.setEventHubId(recoveryCase.getEventHubId());
-            mission.setCampusZoneId(recommendation.campusZoneId());
-            mission.setZoneLabel(recommendation.zoneLabel());
-            mission.setTitle("Check " + recommendation.zoneLabel());
-            mission.setRecommendedAction("Staff should check this zone and compare any found item with the lost report.");
-            mission.setReasons(recommendation.reasons());
-            mission.setScore(recommendation.score());
-            mission.setPriority(recommendation.score() >= 70 ? "high" : recommendation.score() >= 45 ? "medium" : "low");
-            mission.setUpdatedDate(clock.now());
-            missions.save(mission);
-        }
-    }
-
     private String planText(List<RecoveryPlanningService.ZoneRecommendation> recommendations) {
         if (recommendations.isEmpty()) {
             return "Staff are checking likely locations based on the report details.";
@@ -445,59 +314,6 @@ public class RecoveryCaseService {
         return UUID.randomUUID().toString().replace("-", "").substring(0, 10);
     }
 
-    private RecoveryCaseListItem caseListItem(RecoveryCase recoveryCase) {
-        Optional<LostReport> report = isBlank(recoveryCase.getLostReportId())
-                ? Optional.empty()
-                : lostReports.findById(recoveryCase.getLostReportId());
-        List<RecoveryMission> caseMissions = missions.findByRecoveryCaseId(recoveryCase.getId());
-        return new RecoveryCaseListItem(
-                recoveryCase,
-                report.orElse(null),
-                nextAction(recoveryCase, caseMissions),
-                updates(recoveryCase, report.orElse(null), caseMissions),
-                caseMissions
-        );
-    }
-
-    private String nextAction(RecoveryCase recoveryCase, List<RecoveryMission> caseMissions) {
-        String status = normalize(recoveryCase.getStatus());
-        if ("open".equals(status) && caseMissions.isEmpty()) {
-            return "Refresh plan and create recovery missions.";
-        }
-        if ("open".equals(status)) {
-            return "Assign staff to open recovery missions.";
-        }
-        if ("match_identified".equals(status)) {
-            return "Review suggested match and invite a claim if appropriate.";
-        }
-        if ("claim_in_review".equals(status)) {
-            return "Review ownership evidence and approve or deny the claim.";
-        }
-        if ("pickup_ready".equals(status)) {
-            return "Coordinate pickup and confirm return.";
-        }
-        if ("paused".equals(status)) {
-            return "Review paused case and reopen or archive it.";
-        }
-        return "No immediate action required.";
-    }
-
-    private List<String> updates(RecoveryCase recoveryCase, LostReport report, List<RecoveryMission> caseMissions) {
-        List<String> updates = new ArrayList<>();
-        updates.add(report == null ? "Missing linked Lost Report." : "Linked Lost Report: " + report.getId());
-        updates.add(caseMissions.size() + " mission(s) on file.");
-        if (!isBlank(recoveryCase.getSelectedFoundItemId())) {
-            updates.add("Possible found-item match: " + recoveryCase.getSelectedFoundItemId());
-        }
-        if (!isBlank(recoveryCase.getLinkedClaimId())) {
-            updates.add("Linked claim: " + recoveryCase.getLinkedClaimId());
-        }
-        if (!isBlank(recoveryCase.getUpdatedDate())) {
-            updates.add("Last updated " + recoveryCase.getUpdatedDate());
-        }
-        return updates;
-    }
-
     private void applyLostReportDefaults(LostReport report) {
         String now = clock.now();
         report.setId(valueOrDefault(report.getId(), "lost_" + shortId()));
@@ -517,20 +333,6 @@ public class RecoveryCaseService {
         if (!isBlank(status) && !CASE_STATUSES.contains(normalize(status))) {
             throw new BadRequestException("Recovery case status must be one of " + CASE_STATUSES + ".");
         }
-    }
-
-    private void validateMissionStatus(String status) {
-        if (!isBlank(status) && !MISSION_STATUSES.contains(normalize(status))) {
-            throw new BadRequestException("Recovery mission status must be one of " + MISSION_STATUSES + ".");
-        }
-    }
-
-    private boolean isActiveCase(RecoveryCase recoveryCase) {
-        return !List.of("returned", "closed", "archived").contains(normalize(recoveryCase.getStatus()));
-    }
-
-    private boolean isOpenMission(RecoveryMission mission) {
-        return !List.of("completed", "canceled").contains(normalize(mission.getStatus()));
     }
 
     private boolean isClaimAwaitingReview(Claim claim) {

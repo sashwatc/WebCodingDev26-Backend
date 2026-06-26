@@ -14,6 +14,7 @@ import com.FBLA.WebCodingDev26Backend.repository.CustodyEventRepository;
 import com.FBLA.WebCodingDev26Backend.repository.FoundItemRepository;
 import com.FBLA.WebCodingDev26Backend.repository.LostReportRepository;
 import com.FBLA.WebCodingDev26Backend.repository.RecoveryCaseRepository;
+import com.FBLA.WebCodingDev26Backend.service.SavedSearchService;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -41,6 +42,7 @@ public class FoundItemService {
     private final LostReportRepository lostReports;
     private final CustodyLedgerService custodyLedgerService;
     private final InputSanitizer sanitizer;
+    private SavedSearchService savedSearchService;
 
     public FoundItemService(FoundItemRepository repository, PatchMapper mapper, ClockService clock) {
         this(repository, mapper, clock, null, null, null, null, null, null, null, null, new InputSanitizer());
@@ -94,11 +96,78 @@ public class FoundItemService {
         this.sanitizer = sanitizer;
     }
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setSavedSearchService(SavedSearchService savedSearchService) {
+        this.savedSearchService = savedSearchService;
+    }
+
     public List<PublicFoundItemResponse> list() {
         return repository.findAll().stream()
                 .filter(this::isPubliclyVisible)
                 .map(PublicFoundItemResponse::from)
                 .toList();
+    }
+
+    public Map<String, Object> listFiltered(
+            String q, String category, String color, String location,
+            String status, String dateFrom, String dateTo,
+            String sortBy, int page, int size) {
+
+        // Default: show publicly visible items (FOUND + CLAIM_PENDING + approved)
+        String effectiveStatus = (status == null || status.isBlank()) ? "public" : status;
+        List<FoundItem> all = repository.findAll();
+
+        List<PublicFoundItemResponse> filtered = all.stream()
+                .filter(item -> !Boolean.TRUE.equals(item.getRestrictedVisibility()))
+                .filter(item -> {
+                    if ("all".equalsIgnoreCase(effectiveStatus)) return true;
+                    if ("public".equals(effectiveStatus)) return ItemStatus.isPubliclyVisible(item.getStatus());
+                    return effectiveStatus.equalsIgnoreCase(item.getStatus());
+                })
+                .filter(item -> category == null || category.isBlank() || category.equalsIgnoreCase(item.getCategory()))
+                .filter(item -> color == null || color.isBlank() || normalize(item.getColor()).contains(normalize(color)))
+                .filter(item -> location == null || location.isBlank() || normalize(item.getLocationFound()).contains(normalize(location)))
+                .filter(item -> dateFrom == null || dateFrom.isBlank() || item.getDateFound() != null && item.getDateFound().compareTo(dateFrom) >= 0)
+                .filter(item -> dateTo == null || dateTo.isBlank() || item.getDateFound() != null && item.getDateFound().compareTo(dateTo) <= 0)
+                .filter(item -> matchesKeyword(item, q))
+                .sorted(comparatorFor(sortBy, q))
+                .map(PublicFoundItemResponse::from)
+                .toList();
+
+        int total = filtered.size();
+        int fromIndex = Math.min(page * size, total);
+        int toIndex = Math.min(fromIndex + size, total);
+        List<PublicFoundItemResponse> pageItems = filtered.subList(fromIndex, toIndex);
+
+        return Map.of("items", pageItems, "total", total, "page", page, "size", size);
+    }
+
+    private boolean matchesKeyword(FoundItem item, String q) {
+        if (q == null || q.isBlank()) {
+            return true;
+        }
+        String keyword = normalize(q);
+        return normalize(item.getTitle()).contains(keyword)
+                || normalize(item.getDescription()).contains(keyword)
+                || normalize(item.getBrand()).contains(keyword)
+                || (item.getTags() != null && item.getTags().stream().anyMatch(t -> normalize(t).contains(keyword)));
+    }
+
+    private java.util.Comparator<FoundItem> comparatorFor(String sortBy, String q) {
+        if ("relevance".equalsIgnoreCase(sortBy) && q != null && !q.isBlank()) {
+            String keyword = normalize(q);
+            return java.util.Comparator.comparingInt((FoundItem item) ->
+                    normalize(item.getTitle()).contains(keyword) ? 0 : 1);
+        }
+        if ("recently_updated".equalsIgnoreCase(sortBy)) {
+            return java.util.Comparator.comparing(
+                    (FoundItem item) -> item.getUpdatedDate() == null ? "" : item.getUpdatedDate(),
+                    java.util.Comparator.reverseOrder());
+        }
+        // Default: newest (by createdDate desc)
+        return java.util.Comparator.comparing(
+                (FoundItem item) -> item.getCreatedDate() == null ? "" : item.getCreatedDate(),
+                java.util.Comparator.reverseOrder());
     }
 
     public PublicFoundItemResponse getPublic(String id) {
@@ -114,7 +183,17 @@ public class FoundItemService {
     }
 
     public FoundItem create(Map<String, Object> data) {
+        return create(data, false);
+    }
+
+    public FoundItem create(Map<String, Object> data, boolean isStaff) {
         Map<String, Object> sanitizedData = sanitizer.sanitizeMap(data);
+        if (!isStaff) {
+            sanitizedData.remove("storageLocation");
+            sanitizedData.remove("storage_location");
+            sanitizedData.remove("privateVerificationClues");
+            sanitizedData.remove("private_verification_clues");
+        }
         FoundItem item = mapper.convert(sanitizedData, FoundItem.class);
         validateFoundItem(item);
         String now = clock.now();
@@ -129,12 +208,25 @@ public class FoundItemService {
         FoundItem savedItem = repository.save(item);
         appendCustody(savedItem, "intake_created", "Found item intake created.");
         refreshMatches(savedItem);
+        if (savedSearchService != null && ItemStatus.isPubliclyVisible(savedItem.getStatus())) {
+            savedSearchService.checkAlertsForNewItem(savedItem);
+        }
         return savedItem;
     }
 
     public FoundItem update(String id, Map<String, Object> data) {
+        return update(id, data, false);
+    }
+
+    public FoundItem update(String id, Map<String, Object> data, boolean isStaff) {
         FoundItem existing = repository.findById(id).orElseThrow(() -> new NotFoundException("Found item not found"));
         Map<String, Object> sanitizedData = sanitizer.sanitizeMap(data);
+        if (!isStaff) {
+            sanitizedData.remove("storageLocation");
+            sanitizedData.remove("storage_location");
+            sanitizedData.remove("privateVerificationClues");
+            sanitizedData.remove("private_verification_clues");
+        }
 
         if (sanitizedData.containsKey("upsertRating") || sanitizedData.containsKey("upsert_rating")) {
             return upsertRating(existing, sanitizedData.getOrDefault("upsertRating", sanitizedData.get("upsert_rating")));

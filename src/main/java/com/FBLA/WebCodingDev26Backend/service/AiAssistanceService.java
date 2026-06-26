@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -32,29 +33,35 @@ public class AiAssistanceService {
     private static final List<String> COLORS = List.of(
             "Black", "White", "Red", "Blue", "Green", "Yellow", "Orange", "Purple", "Pink", "Brown", "Gray", "Silver", "Gold"
     );
-    private static final Map<String, List<String>> CATEGORY_KEYWORDS = Map.ofEntries(
-            Map.entry("electronics", List.of("airpods", "earbuds", "headphones", "phone", "charger", "laptop", "calculator", "watch", "tablet")),
-            Map.entry("clothing", List.of("hoodie", "jacket", "shirt", "sweater", "coat", "hat", "gloves")),
-            Map.entry("accessories", List.of("wallet", "purse", "glasses", "sunglasses", "bracelet", "watch")),
-            Map.entry("school_supplies", List.of("calculator", "notebook", "binder", "book", "pencil", "pen", "folder")),
-            Map.entry("sports_equipment", List.of("ball", "cleats", "kneepads", "pads", "racket", "helmet", "gym")),
-            Map.entry("food_containers", List.of("bottle", "hydro", "flask", "lunchbox", "thermos", "container")),
-            Map.entry("keys_ids", List.of("keys", "key", "id", "badge", "lanyard")),
-            Map.entry("bags_cases", List.of("backpack", "bag", "case", "pouch", "tote")),
-            Map.entry("personal_items", List.of("ring", "necklace", "makeup", "medicine", "planner"))
-    );
-    private static final Map<String, List<String>> LOCATIONS = Map.ofEntries(
-            Map.entry("Gymnasium", List.of("gym", "gymnasium", "bleachers", "game", "athletic")),
-            Map.entry("Cafeteria", List.of("cafeteria", "lunch")),
-            Map.entry("Library", List.of("library")),
-            Map.entry("Main Office", List.of("office", "front desk")),
-            Map.entry("Science Hall", List.of("science", "lab")),
-            Map.entry("Auditorium", List.of("auditorium")),
-            Map.entry("Bus Loop", List.of("bus")),
-            Map.entry("Football Field", List.of("football", "field", "stadium")),
-            Map.entry("Student Lounge", List.of("student lounge", "lounge")),
-            Map.entry("Computer Lab", List.of("computer lab", "computer"))
-    );
+    private static final Map<String, List<String>> CATEGORY_KEYWORDS;
+    static {
+        Map<String, List<String>> map = new LinkedHashMap<>();
+        map.put("electronics", List.of("airpods", "earbuds", "headphones", "phone", "charger", "laptop", "calculator", "watch", "tablet"));
+        map.put("clothing", List.of("hoodie", "jacket", "shirt", "sweater", "coat", "hat", "gloves"));
+        map.put("accessories", List.of("wallet", "purse", "glasses", "sunglasses", "bracelet"));
+        map.put("school_supplies", List.of("notebook", "binder", "book", "pencil", "pen", "folder"));
+        map.put("keys_ids", List.of("keys", "key", "id", "badge", "lanyard"));
+        map.put("food_containers", List.of("bottle", "hydro", "flask", "lunchbox", "thermos", "container"));
+        map.put("sports_equipment", List.of("ball", "cleats", "kneepads", "pads", "racket", "helmet", "gym bag"));
+        map.put("bags_cases", List.of("backpack", "bag", "case", "pouch", "tote"));
+        map.put("personal_items", List.of("ring", "necklace", "makeup", "medicine", "planner"));
+        CATEGORY_KEYWORDS = Collections.unmodifiableMap(map);
+    }
+    private static final Map<String, List<String>> LOCATIONS;
+    static {
+        Map<String, List<String>> map = new LinkedHashMap<>();
+        map.put("Gymnasium", List.of("gym", "gymnasium", "bleachers", "game", "athletic"));
+        map.put("Cafeteria", List.of("cafeteria", "lunch"));
+        map.put("Library", List.of("library"));
+        map.put("Main Office", List.of("office", "front desk"));
+        map.put("Science Hall", List.of("science", "lab"));
+        map.put("Auditorium", List.of("auditorium"));
+        map.put("Bus Loop", List.of("bus"));
+        map.put("Football Field", List.of("football", "field", "stadium"));
+        map.put("Student Lounge", List.of("student lounge", "lounge"));
+        map.put("Computer Lab", List.of("computer lab", "computer"));
+        LOCATIONS = Collections.unmodifiableMap(map);
+    }
     private static final List<String> BRANDS = List.of(
             "Apple", "AirPods", "Beats", "Samsung", "Sony", "Nike", "Adidas", "Hydro Flask", "JanSport",
             "Texas Instruments", "TI", "Dell", "HP", "Lenovo"

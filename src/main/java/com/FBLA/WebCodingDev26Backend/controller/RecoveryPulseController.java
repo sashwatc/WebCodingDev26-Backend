@@ -20,8 +20,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import com.FBLA.WebCodingDev26Backend.exception.NotFoundException;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -60,6 +62,14 @@ public class RecoveryPulseController {
         return response(requireUser(emailHeader));
     }
 
+    @PostMapping("/preferences")
+    public NotificationPreferencesResponse updatePreferencesPost(
+            @RequestHeader(value = "X-Demo-User-Email", required = false) String emailHeader,
+            @RequestBody NotificationPreferencesRequest request
+    ) {
+        return updatePreferences(emailHeader, request);
+    }
+
     @PatchMapping("/preferences")
     public NotificationPreferencesResponse updatePreferences(
             @RequestHeader(value = "X-Demo-User-Email", required = false) String emailHeader,
@@ -90,6 +100,25 @@ public class RecoveryPulseController {
         }
         user.setUpdatedDate(clock.now());
         return response(users.save(user));
+    }
+
+    @PostMapping("/notifications/{id}/read")
+    public Notification markNotificationRead(
+            @PathVariable String id,
+            @RequestHeader(value = "X-Demo-User-Email", required = false) String emailHeader
+    ) {
+        String email = normalize(authorization.resolveEmail(emailHeader));
+        if (email.isBlank()) {
+            throw new ForbiddenException("Signed-in user is required.");
+        }
+        Notification notification = notifications.findById(id)
+                .orElseThrow(() -> new NotFoundException("Notification not found"));
+        if (!email.equals(normalize(notification.getUserEmail())) && !authorization.isStaffOrAdmin(emailHeader)) {
+            throw new ForbiddenException("Access denied.");
+        }
+        notification.setIsRead(true);
+        notification.setUpdatedDate(clock.now());
+        return notifications.save(notification);
     }
 
     @GetMapping("/notifications")

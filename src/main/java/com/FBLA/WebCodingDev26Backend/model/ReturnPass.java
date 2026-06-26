@@ -17,6 +17,7 @@ public class ReturnPass {
     private String pickupLocation;
     private String status;
     private String oneTimeCode;
+    private String pinHash;
     private String token;
     private String expiresAt;
     private String redeemedAt;
@@ -41,6 +42,8 @@ public class ReturnPass {
     public void setStatus(String status) { this.status = status; }
     public String getOneTimeCode() { return oneTimeCode; }
     public void setOneTimeCode(String oneTimeCode) { this.oneTimeCode = oneTimeCode; }
+    public String getPinHash() { return pinHash; }
+    public void setPinHash(String pinHash) { this.pinHash = pinHash; }
     public String getToken() { return token; }
     public void setToken(String token) { this.token = token; }
     public String getExpiresAt() { return expiresAt; }

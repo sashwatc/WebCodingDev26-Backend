@@ -5,16 +5,13 @@ import com.FBLA.WebCodingDev26Backend.model.AssetRegistryRecord;
 import com.FBLA.WebCodingDev26Backend.model.AuditLog;
 import com.FBLA.WebCodingDev26Backend.model.CampusZone;
 import com.FBLA.WebCodingDev26Backend.model.Claim;
-import com.FBLA.WebCodingDev26Backend.model.EventRecoveryHub;
 import com.FBLA.WebCodingDev26Backend.model.FoundItem;
 import com.FBLA.WebCodingDev26Backend.model.ItemStatus;
 import com.FBLA.WebCodingDev26Backend.model.LostReport;
 import com.FBLA.WebCodingDev26Backend.model.MatchSuggestion;
 import com.FBLA.WebCodingDev26Backend.model.Notification;
 import com.FBLA.WebCodingDev26Backend.model.NotificationDelivery;
-import com.FBLA.WebCodingDev26Backend.model.PartnerRelay;
 import com.FBLA.WebCodingDev26Backend.model.RecoveryCase;
-import com.FBLA.WebCodingDev26Backend.model.RecoveryMission;
 import com.FBLA.WebCodingDev26Backend.model.RecoveryNode;
 import com.FBLA.WebCodingDev26Backend.model.ReturnPass;
 import com.FBLA.WebCodingDev26Backend.repository.AppUserRepository;
@@ -22,18 +19,16 @@ import com.FBLA.WebCodingDev26Backend.repository.AssetRegistryRecordRepository;
 import com.FBLA.WebCodingDev26Backend.repository.AuditLogRepository;
 import com.FBLA.WebCodingDev26Backend.repository.CampusZoneRepository;
 import com.FBLA.WebCodingDev26Backend.repository.ClaimRepository;
-import com.FBLA.WebCodingDev26Backend.repository.EventRecoveryHubRepository;
 import com.FBLA.WebCodingDev26Backend.repository.FoundItemRepository;
 import com.FBLA.WebCodingDev26Backend.repository.LostReportRepository;
 import com.FBLA.WebCodingDev26Backend.repository.NotificationRepository;
 import com.FBLA.WebCodingDev26Backend.repository.NotificationDeliveryRepository;
-import com.FBLA.WebCodingDev26Backend.repository.PartnerRelayRepository;
 import com.FBLA.WebCodingDev26Backend.repository.PreventionAlertRepository;
 import com.FBLA.WebCodingDev26Backend.repository.RecoveryCaseRepository;
-import com.FBLA.WebCodingDev26Backend.repository.RecoveryMissionRepository;
 import com.FBLA.WebCodingDev26Backend.repository.RecoveryNodeRepository;
 import com.FBLA.WebCodingDev26Backend.repository.ReturnPassRepository;
 import com.FBLA.WebCodingDev26Backend.service.CustodyLedgerService;
+import com.FBLA.WebCodingDev26Backend.service.SystemSettingService;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -57,17 +52,17 @@ public class SeedDataConfig {
             AuditLogRepository auditLogs,
             AppUserRepository users,
             CampusZoneRepository campusZones,
-            EventRecoveryHubRepository eventHubs,
             AssetRegistryRecordRepository assetRecords,
             RecoveryCaseRepository recoveryCases,
-            RecoveryMissionRepository recoveryMissions,
             ReturnPassRepository returnPasses,
             PreventionAlertRepository preventionAlerts,
             NotificationDeliveryRepository notificationDeliveries,
             RecoveryNodeRepository recoveryNodes,
-            PartnerRelayRepository partnerRelays,
             CustodyLedgerService custodyLedgerService,
-            @Value("${app.seed.enabled}") boolean seedEnabled
+            SystemSettingService systemSettings,
+            @Value("${app.seed.enabled}") boolean seedEnabled,
+            @Value("${app.pickup.location:PVHS Main Office pickup station}") String pickupLocation,
+            @Value("${app.pickup.hours:School days, 8:00 AM-3:30 PM}") String pickupHours
     ) {
         return seedDataRunner(
                 foundItems,
@@ -77,16 +72,16 @@ public class SeedDataConfig {
                 auditLogs,
                 users,
                 campusZones,
-                eventHubs,
                 assetRecords,
                 recoveryCases,
-                recoveryMissions,
                 returnPasses,
                 preventionAlerts,
                 notificationDeliveries,
                 recoveryNodes,
-                partnerRelays,
                 custodyLedgerService,
+                systemSettings,
+                pickupLocation,
+                pickupHours,
                 seedEnabled
         );
     }
@@ -111,16 +106,16 @@ public class SeedDataConfig {
             AuditLogRepository auditLogs,
             AppUserRepository users,
             CampusZoneRepository campusZones,
-            EventRecoveryHubRepository eventHubs,
             AssetRegistryRecordRepository assetRecords,
             RecoveryCaseRepository recoveryCases,
-            RecoveryMissionRepository recoveryMissions,
             ReturnPassRepository returnPasses,
             PreventionAlertRepository preventionAlerts,
             NotificationDeliveryRepository notificationDeliveries,
             RecoveryNodeRepository recoveryNodes,
-            PartnerRelayRepository partnerRelays,
             CustodyLedgerService custodyLedgerService,
+            SystemSettingService systemSettings,
+            String pickupLocation,
+            String pickupHours,
             boolean seedEnabled
     ) {
         return args -> {
@@ -129,19 +124,34 @@ public class SeedDataConfig {
             }
 
             try {
+                // Always upsert the four required demo accounts so they exist on
+                // every startup, even when the DB was already seeded on a prior run.
+                upsertDemoUsers(users);
+
+                // Always seed default system settings (idempotent)
+                if (systemSettings != null) {
+                    systemSettings.seedIfAbsent("categories",
+                            "[\"electronics\",\"clothing\",\"bags_cases\",\"personal_items\"," +
+                            "\"food_containers\",\"books_stationery\",\"keys\",\"jewelry\"," +
+                            "\"sports_equipment\",\"musical_instruments\",\"other\"]");
+                    systemSettings.seedIfAbsent("pickup.location",
+                            pickupLocation != null ? pickupLocation : "PVHS Main Office pickup station");
+                    systemSettings.seedIfAbsent("pickup.hours",
+                            pickupHours != null ? pickupHours : "School days, 8:00 AM-3:30 PM");
+                }
+
                 if (foundItems.count() > 0) {
                     return;
                 }
 
                 seedZones(campusZones);
                 seedAssets(assetRecords);
-                seedEvent(eventHubs);
                 seedItems(foundItems);
                 seedLostReports(lostReports);
                 seedClaims(claims);
-                seedRecovery(recoveryCases, recoveryMissions);
+                seedRecoveryCases(recoveryCases);
                 seedPasses(returnPasses);
-                seedRelay(recoveryNodes, partnerRelays);
+                seedRelay(recoveryNodes);
                 seedCustody(custodyLedgerService);
 
                 notifications.save(notification("notif_001", "jordan.kim@pleasantvalley.edu", "Strong match available", "A strong possible match is ready for review.", "strong_item_match", "/UserDashboard", "found_002"));
@@ -150,10 +160,7 @@ public class SeedDataConfig {
                 seedNotificationDeliveries(notificationDeliveries);
                 auditLogs.save(auditLog());
                 users.save(user("user_001", "Jordan Kim", "jordan.kim@pleasantvalley.edu", "student"));
-                users.save(user("user_002", "Avery Patel", "avery.patel@pleasantvalley.edu", "admin"));
                 users.save(user("user_003", "Riley Chen", "riley.chen@pleasantvalley.edu", "student"));
-                users.save(user("user_staff_demo", "Demo Staff", "staff.demo@pleasantvalley.edu", "staff"));
-                users.save(user("user_student_demo", "Demo Student", "student.demo@pleasantvalley.edu", "student"));
             } catch (DataAccessException exception) {
                 LOGGER.warn("Skipping seed data because MongoDB is unavailable: {}", exception.getMessage());
             }
@@ -186,28 +193,6 @@ public class SeedDataConfig {
                 asset("asset_cam_027", "ATH-CAM-027", "Camera", "Athletics Office"),
                 asset("asset_band_008", "BAND-INST-008", "Instrument", "Fine Arts Office")
         ));
-    }
-
-    private void seedEvent(EventRecoveryHubRepository eventHubs) {
-        if (eventHubs == null) {
-            return;
-        }
-        EventRecoveryHub hub = new EventRecoveryHub();
-        hub.setId("hub_basketball_game");
-        hub.setTenantId("pvhs");
-        hub.setName("PVHS vs. Bettendorf Basketball Game");
-        hub.setDescription("Demo integration-ready recovery hub for a high-traffic campus event.");
-        hub.setEventType("athletics");
-        hub.setStartTime("2026-03-14T18:00:00Z");
-        hub.setEndTime("2026-03-14T21:00:00Z");
-        hub.setStatus("active");
-        hub.setCampusZoneIds(List.of("zone_gym_entrance", "zone_gym_bleachers", "zone_athletics"));
-        hub.setPublicEnabled(true);
-        hub.setDisplayEnabled(true);
-        hub.setCreatedBy("avery.patel@pleasantvalley.edu");
-        hub.setCreatedDate(NOW);
-        hub.setUpdatedDate(NOW);
-        eventHubs.save(hub);
     }
 
     private void seedItems(FoundItemRepository foundItems) {
@@ -258,7 +243,17 @@ public class SeedDataConfig {
         chromebook.setRestrictedVisibility(true);
         chromebook.setStorageLocation("Technology Office intake shelf");
 
-        foundItems.saveAll(List.of(bottle, backpack, airpods, calculator, passItem, returned, chromebook));
+        FoundItem hoodie = foundItem("found_blue_hoodie", "Blue Zip-Up Hoodie", "clothing", "Blue zip-up hoodie with a school logo on the left chest.", "Blue", "", "Cafeteria", "2026-03-15", "12:30", ItemStatus.FOUND, "FB-2026-HDY01");
+        hoodie.setCampusZoneId("zone_cafeteria");
+        hoodie.setTags(List.of("hoodie", "blue", "zip-up", "clothing"));
+        hoodie.setStorageLocation("Main Office clothing bin");
+
+        FoundItem umbrella = foundItem("found_red_umbrella", "Red Compact Umbrella", "personal_items", "Small red compact umbrella found in the library study area.", "Red", "", "Library Study Area", "2026-03-15", "14:00", ItemStatus.FOUND, "FB-2026-UMB02");
+        umbrella.setCampusZoneId("zone_library");
+        umbrella.setTags(List.of("umbrella", "red", "compact", "library"));
+        umbrella.setStorageLocation("Main Office shelf B3");
+
+        foundItems.saveAll(List.of(bottle, backpack, airpods, calculator, passItem, returned, chromebook, hoodie, umbrella));
     }
 
     private void seedLostReports(LostReportRepository lostReports) {
@@ -303,8 +298,8 @@ public class SeedDataConfig {
         claims.save(completed);
     }
 
-    private void seedRecovery(RecoveryCaseRepository recoveryCases, RecoveryMissionRepository recoveryMissions) {
-        if (recoveryCases == null || recoveryMissions == null) {
+    private void seedRecoveryCases(RecoveryCaseRepository recoveryCases) {
+        if (recoveryCases == null) {
             return;
         }
         RecoveryCase recoveryCase = new RecoveryCase();
@@ -326,9 +321,6 @@ public class SeedDataConfig {
         recoveryCase.setUpdatedDate(NOW);
         recoveryCase.setIsDemo(true);
         recoveryCases.save(recoveryCase);
-
-        recoveryMissions.save(mission("mission_bleachers", "case_airpods_game", "zone_gym_bleachers", "Gym Bleachers", 86, "high", "open"));
-        recoveryMissions.save(mission("mission_entrance", "case_airpods_game", "zone_gym_entrance", "Gym Entrance", 61, "medium", "checked"));
     }
 
     private void seedPasses(ReturnPassRepository returnPasses) {
@@ -343,8 +335,8 @@ public class SeedDataConfig {
         returnPasses.save(redeemed);
     }
 
-    private void seedRelay(RecoveryNodeRepository recoveryNodes, PartnerRelayRepository partnerRelays) {
-        if (recoveryNodes == null || partnerRelays == null) {
+    private void seedRelay(RecoveryNodeRepository recoveryNodes) {
+        if (recoveryNodes == null) {
             return;
         }
         recoveryNodes.saveAll(List.of(
@@ -353,18 +345,6 @@ public class SeedDataConfig {
                 node("node_transportation", "PVHS Transportation"),
                 node("node_fine_arts", "PVHS Fine Arts")
         ));
-        PartnerRelay relay = new PartnerRelay();
-        relay.setId("relay_airpods_athletics");
-        relay.setSourceNodeId("node_main_office");
-        relay.setTargetNodeId("node_athletics");
-        relay.setRecoveryCaseId("case_airpods_game");
-        relay.setFoundItemId("found_airpods_game");
-        relay.setStatus("awaiting_verification");
-        relay.setPublicSummary("A possible match may be available at a partner location. Submit ownership evidence to continue.");
-        relay.setRedactedMatchReasons(List.of("Category and color overlap", "Event zone context overlaps"));
-        relay.setCreatedDate(NOW);
-        relay.setUpdatedDate(NOW);
-        partnerRelays.save(relay);
     }
 
     private void seedCustody(CustodyLedgerService custodyLedgerService) {
@@ -470,25 +450,6 @@ public class SeedDataConfig {
         return pass;
     }
 
-    private RecoveryMission mission(String id, String caseId, String zoneId, String zoneLabel, int score, String priority, String status) {
-        RecoveryMission mission = new RecoveryMission();
-        mission.setId(id);
-        mission.setRecoveryCaseId(caseId);
-        mission.setEventHubId("hub_basketball_game");
-        mission.setCampusZoneId(zoneId);
-        mission.setZoneLabel(zoneLabel);
-        mission.setTitle("Check " + zoneLabel);
-        mission.setRecommendedAction("Staff should check this zone and compare any found item with the lost report.");
-        mission.setReasons(List.of("Last seen near gym", "Event workflow is active"));
-        mission.setScore(score);
-        mission.setPriority(priority);
-        mission.setStatus(status);
-        mission.setCreatedDate(NOW);
-        mission.setUpdatedDate(NOW);
-        mission.setIsDemo(true);
-        return mission;
-    }
-
     private CampusZone zone(String id, String label) {
         CampusZone zone = new CampusZone();
         zone.setId(id);
@@ -582,6 +543,32 @@ public class SeedDataConfig {
         auditLog.setDetails("PVHS Recovery Mesh NLC demo records loaded.");
         auditLog.setCreatedDate(NOW);
         return auditLog;
+    }
+
+    /**
+     * Always upsert the four required demo accounts with correct roles.
+     * Uses the seeded ID as the document _id so duplicate-key errors are
+     * absorbed by MongoDB's save-or-replace semantics.
+     */
+    private void upsertDemoUsers(AppUserRepository users) {
+        upsertUser(users, "user_002", "Avery Patel", "avery.patel@pleasantvalley.edu", "admin");
+        upsertUser(users, "user_staff_demo", "Demo Staff", "staff.demo@pleasantvalley.edu", "staff");
+        upsertUser(users, "user_student_demo", "Demo Student", "student.demo@pleasantvalley.edu", "student");
+        upsertUser(users, "user_mia_rodriguez", "Mia Rodriguez", "mia.rodriguez@pleasantvalley.edu", "student");
+    }
+
+    /** Upsert a single user: preserve existing document when found by email, otherwise insert. */
+    private void upsertUser(AppUserRepository users, String id, String fullName, String email, String role) {
+        AppUser existing = users.findByEmail(email).orElse(null);
+        if (existing != null) {
+            // Correct the role and name if they drifted (e.g. auto-created by signIn)
+            existing.setRole(role);
+            existing.setFullName(fullName);
+            existing.setUpdatedDate(NOW);
+            users.save(existing);
+        } else {
+            users.save(user(id, fullName, email, role));
+        }
     }
 
     private AppUser user(String id, String fullName, String email, String role) {

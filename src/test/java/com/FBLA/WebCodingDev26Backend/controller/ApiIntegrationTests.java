@@ -3,6 +3,8 @@ package com.FBLA.WebCodingDev26Backend.controller;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.hasSize;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.when;
@@ -141,7 +143,9 @@ class ApiIntegrationTests {
 
     @Test
     void seedDataShapeIsAvailableThroughApiLists() throws Exception {
-        when(foundItemService.list()).thenReturn(List.of(publicItem("found_001"), publicItem("found_002")));
+        List<PublicFoundItemResponse> seedItems = List.of(publicItem("found_001"), publicItem("found_002"));
+        when(foundItemService.listFiltered(any(), any(), any(), any(), any(), any(), any(), any(), anyInt(), anyInt()))
+                .thenReturn(Map.of("items", seedItems, "total", 2, "page", 0, "size", 20));
         doReturn(List.of(lostReport("lost_001"))).when(genericEntityService).list("LostReport");
         doReturn(List.of(claim("claim_001"))).when(genericEntityService).list("Claim");
         doReturn(List.of(notification("notif_001"))).when(genericEntityService).list("Notification");
@@ -191,9 +195,11 @@ class ApiIntegrationTests {
         rating.setRating(5);
         ratedItem.setRatings(new ArrayList<>(List.of(rating)));
 
-        when(foundItemService.list()).thenReturn(List.of(publicItem("found_001"), publicItem("found_002")));
-        when(foundItemService.create(any())).thenReturn(testItem);
-        when(foundItemService.update(eq("found_test"), any()))
+        List<PublicFoundItemResponse> itemList = List.of(publicItem("found_001"), publicItem("found_002"));
+        when(foundItemService.listFiltered(any(), any(), any(), any(), any(), any(), any(), any(), anyInt(), anyInt()))
+                .thenReturn(Map.of("items", itemList, "total", 2, "page", 0, "size", 20));
+        when(foundItemService.create(any(), anyBoolean())).thenReturn(testItem);
+        when(foundItemService.update(eq("found_test"), any(), anyBoolean()))
                 .thenReturn(approvedItem)
                 .thenReturn(ratedItem);
         when(foundItemService.delete("found_test")).thenReturn(Map.of("success", true, "archived", false));

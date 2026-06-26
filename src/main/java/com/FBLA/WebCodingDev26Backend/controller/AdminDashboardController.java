@@ -5,10 +5,14 @@ import com.FBLA.WebCodingDev26Backend.model.AuditLog;
 import com.FBLA.WebCodingDev26Backend.model.Claim;
 import com.FBLA.WebCodingDev26Backend.model.FoundItem;
 import com.FBLA.WebCodingDev26Backend.model.Notification;
+import com.FBLA.WebCodingDev26Backend.repository.AppUserRepository;
+import com.FBLA.WebCodingDev26Backend.repository.FoundItemRepository;
 import com.FBLA.WebCodingDev26Backend.service.AdminWorkflowService;
 import com.FBLA.WebCodingDev26Backend.service.DemoAuthorizationService;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -22,39 +26,43 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminDashboardController {
     private final AdminWorkflowService workflow;
     private final DemoAuthorizationService authorizationService;
+    private final AppUserRepository userRepository;
+    private final FoundItemRepository foundItemRepository;
 
-    public AdminDashboardController(AdminWorkflowService workflow, DemoAuthorizationService authorizationService) {
+    public AdminDashboardController(AdminWorkflowService workflow, DemoAuthorizationService authorizationService, AppUserRepository userRepository, FoundItemRepository foundItemRepository) {
         this.workflow = workflow;
         this.authorizationService = authorizationService;
+        this.userRepository = userRepository;
+        this.foundItemRepository = foundItemRepository;
     }
 
     @GetMapping("/dashboard")
     public Map<String, Object> dashboard(@RequestHeader(value = "X-Demo-User-Email", required = false) String userEmail) {
-        authorizationService.requireAdmin(userEmail);
+        authorizationService.requireStaffOrAdmin(userEmail);
         return workflow.dashboard();
     }
 
     @GetMapping("/lost-reports")
     public List<?> lostReports(@RequestHeader(value = "X-Demo-User-Email", required = false) String userEmail) {
-        authorizationService.requireAdmin(userEmail);
+        authorizationService.requireStaffOrAdmin(userEmail);
         return workflow.listLostReports();
     }
 
     @GetMapping("/claims")
     public List<Claim> claims(@RequestHeader(value = "X-Demo-User-Email", required = false) String userEmail) {
-        authorizationService.requireAdmin(userEmail);
+        authorizationService.requireStaffOrAdmin(userEmail);
         return workflow.listClaims();
     }
 
     @GetMapping("/audit-logs")
     public List<AuditLog> auditLogs(@RequestHeader(value = "X-Demo-User-Email", required = false) String userEmail) {
-        authorizationService.requireAdmin(userEmail);
+        authorizationService.requireStaffOrAdmin(userEmail);
         return workflow.listAuditLogs();
     }
 
     @GetMapping("/notifications")
     public List<Notification> notifications(@RequestHeader(value = "X-Demo-User-Email", required = false) String userEmail) {
-        authorizationService.requireAdmin(userEmail);
+        authorizationService.requireStaffOrAdmin(userEmail);
         return workflow.listNotifications();
     }
 
@@ -64,7 +72,7 @@ public class AdminDashboardController {
             @RequestHeader(value = "X-Demo-User-Email", required = false) String userEmail,
             @RequestBody(required = false) Map<String, Object> data
     ) {
-        AppUser admin = authorizationService.requireAdmin(userEmail);
+        AppUser admin = authorizationService.requireStaffOrAdmin(userEmail);
         return workflow.approveClaim(id, admin, data);
     }
 
@@ -74,7 +82,7 @@ public class AdminDashboardController {
             @RequestHeader(value = "X-Demo-User-Email", required = false) String userEmail,
             @RequestBody(required = false) Map<String, Object> data
     ) {
-        AppUser admin = authorizationService.requireAdmin(userEmail);
+        AppUser admin = authorizationService.requireStaffOrAdmin(userEmail);
         return workflow.denyClaim(id, admin, data);
     }
 
@@ -84,7 +92,7 @@ public class AdminDashboardController {
             @RequestHeader(value = "X-Demo-User-Email", required = false) String userEmail,
             @RequestBody(required = false) Map<String, Object> data
     ) {
-        AppUser admin = authorizationService.requireAdmin(userEmail);
+        AppUser admin = authorizationService.requireStaffOrAdmin(userEmail);
         return workflow.requestMoreInfo(id, admin, data);
     }
 
@@ -94,7 +102,34 @@ public class AdminDashboardController {
             @RequestHeader(value = "X-Demo-User-Email", required = false) String userEmail,
             @RequestBody(required = false) Map<String, Object> data
     ) {
-        AppUser admin = authorizationService.requireAdmin(userEmail);
+        AppUser admin = authorizationService.requireStaffOrAdmin(userEmail);
         return workflow.archiveItem(id, admin, data);
+    }
+
+    @GetMapping("/users")
+    public List<AppUser> users(@RequestHeader(value = "X-Demo-User-Email", required = false) String userEmail) {
+        authorizationService.requireAdmin(userEmail);
+        return userRepository.findAll();
+    }
+
+    @GetMapping("/audit")
+    public List<AuditLog> audit(@RequestHeader(value = "X-Demo-User-Email", required = false) String userEmail) {
+        authorizationService.requireAdmin(userEmail);
+        return workflow.listAuditLogs();
+    }
+
+    @GetMapping("/patterns")
+    public Map<String, Object> patterns(@RequestHeader(value = "X-Demo-User-Email", required = false) String userEmail) {
+        authorizationService.requireAdmin(userEmail);
+        List<FoundItem> items = foundItemRepository.findAll();
+        Map<String, Long> byCategory = items.stream()
+                .collect(Collectors.groupingBy(item -> item.getCategory() == null ? "unknown" : item.getCategory(), Collectors.counting()));
+        Map<String, Long> byStatus = items.stream()
+                .collect(Collectors.groupingBy(item -> item.getStatus() == null ? "unknown" : item.getStatus(), Collectors.counting()));
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("total_items", items.size());
+        result.put("by_category", byCategory);
+        result.put("by_status", byStatus);
+        return result;
     }
 }

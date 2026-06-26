@@ -8,7 +8,6 @@ import com.FBLA.WebCodingDev26Backend.model.Notification;
 import com.FBLA.WebCodingDev26Backend.model.NotificationDelivery;
 import com.FBLA.WebCodingDev26Backend.model.PreventionAlert;
 import com.FBLA.WebCodingDev26Backend.model.RecoveryCase;
-import com.FBLA.WebCodingDev26Backend.model.RecoveryMission;
 import com.FBLA.WebCodingDev26Backend.model.ReturnPass;
 import com.FBLA.WebCodingDev26Backend.repository.AppUserRepository;
 import com.FBLA.WebCodingDev26Backend.repository.NotificationDeliveryRepository;
@@ -212,21 +211,6 @@ public class RecoveryPulseDispatcher {
                         "previous_status", value(previousStatus),
                         "status", value(recoveryCase.getStatus())
                 )
-        ));
-    }
-
-    public RecoveryPulseDispatchResult recoveryMissionAssigned(RecoveryMission mission) {
-        if (mission == null || blank(mission.getAssignedTo())) {
-            return null;
-        }
-        return dispatch(new RecoveryPulseEvent(
-                "recovery_mission_assigned",
-                "missions",
-                mission.getAssignedTo(),
-                mission.getRecoveryCaseId(),
-                "/admin/recovery-cases/" + value(mission.getRecoveryCaseId()),
-                true,
-                Map.of("case_id", value(mission.getRecoveryCaseId()), "mission_id", value(mission.getId()))
         ));
     }
 

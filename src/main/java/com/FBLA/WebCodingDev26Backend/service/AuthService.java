@@ -38,7 +38,12 @@ public class AuthService {
             created.setAvatarUrl("");
             return created;
         });
-        user.setFullName(request.getFullName().trim());
+        // Preserve existing name when fullName is not supplied on sign-in
+        if (request.getFullName() != null && !request.getFullName().isBlank()) {
+            user.setFullName(request.getFullName().trim());
+        } else if (user.getFullName() == null || user.getFullName().isBlank()) {
+            user.setFullName(normalizedEmail);
+        }
         user.setEmail(normalizedEmail);
         if (normalizedEmail.equals(adminEmail)) {
             user.setRole("admin");
@@ -77,9 +82,28 @@ public class AuthService {
         }
         user.setFullName(resolvedName);
         user.setEmail(normalizedEmail);
-        user.setRole(admin ? "admin" : "student");
+        if (admin) {
+            user.setRole("admin");
+        } else if (!"staff".equalsIgnoreCase(user.getRole())) {
+            user.setRole("student");
+        }
         applyNotificationDefaults(user);
         user.setUpdatedDate(now);
+        return repository.save(user);
+    }
+
+    public AppUser signUp(String email, String fullName, String role) {
+        String normalizedEmail = normalize(email);
+        String now = clock.now();
+        AppUser user = new AppUser();
+        user.setId("user_" + UUID.randomUUID().toString().replace("-", "").substring(0, 10));
+        user.setEmail(normalizedEmail);
+        user.setFullName(fullName == null || fullName.isBlank() ? normalizedEmail : fullName.trim());
+        user.setRole(role == null || role.isBlank() ? "student" : role.trim().toLowerCase(Locale.ROOT));
+        user.setAvatarUrl("");
+        user.setCreatedDate(now);
+        user.setUpdatedDate(now);
+        applyNotificationDefaults(user);
         return repository.save(user);
     }
 
