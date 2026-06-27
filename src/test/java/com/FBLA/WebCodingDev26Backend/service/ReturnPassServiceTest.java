@@ -49,6 +49,8 @@ class ReturnPassServiceTest {
     @Mock
     private RecoveryPulseDispatcher recoveryPulse;
     @Mock
+    private CompletionCleanupService completionCleanup;
+    @Mock
     private DemoAuthorizationService authorizationService;
 
     @Test
@@ -166,7 +168,7 @@ class ReturnPassServiceTest {
 
     private ReturnPassService service() {
         return new ReturnPassService(
-                returnPasses, claims, foundItems, notifications, custodyLedgerService, recoveryCaseService, new FixedClock(), recoveryPulse);
+                returnPasses, claims, foundItems, notifications, custodyLedgerService, recoveryCaseService, new FixedClock(), recoveryPulse, completionCleanup);
     }
 
     private ReturnPass pass(String id, String status, String code, String expiresAt) {

@@ -158,7 +158,8 @@ class RecoveryPulseDispatcherTest {
                 custodyLedger,
                 recoveryCases,
                 clock,
-                dispatcher
+                dispatcher,
+                null
         );
 
         assertThatCode(() -> service.create("claim_001", new ReturnPassRequest("", ""), admin()))
