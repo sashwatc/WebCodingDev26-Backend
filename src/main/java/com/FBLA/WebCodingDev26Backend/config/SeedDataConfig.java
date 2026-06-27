@@ -174,16 +174,17 @@ public class SeedDataConfig {
         owalaLost.setMatchedItems(List.of(match("found_owala", "Navy Owala FreeSip Water Bottle", 96)));
         saveSeeded(lostReports, owalaLost);
 
-        Claim owalaClaim = claim("claim_owala", "found_owala", "Avery Chen", "avery.chen@pleasantvalley.edu", "approved");
+        // under_review keeps Avery's claim in the staff work queue and evidence
+        // review (so the demo can show it), while the pre-issued active Return Pass
+        // still redeems it live without depending on a live verify step.
+        Claim owalaClaim = claim("claim_owala", "found_owala", "Avery Chen", "avery.chen@pleasantvalley.edu", "under_review");
         owalaClaim.setFoundItemTitle("Navy Owala FreeSip Water Bottle");
         owalaClaim.setClaimReason("This is my navy Owala — I left it in the North Gym after practice.");
         owalaClaim.setIdentifyingDetails("It has a yellow lightning-bolt sticker on the front and my initials under the lid.");
         owalaClaim.setEvidenceChecklist(List.of("sticker on the front", "initials under the lid", "last seen North Gym"));
         owalaClaim.setVerificationScore(96);
         owalaClaim.setVerificationFlags(List.of("matches sealed clue", "specific hidden detail"));
-        owalaClaim.setVerificationSummary("Claim details match the sealed verification clues; ownership confirmed.");
-        owalaClaim.setReviewedBy("avery.patel@pleasantvalley.edu");
-        owalaClaim.setReviewedAt("2026-03-10T09:30:00Z");
+        owalaClaim.setVerificationSummary("Claim details match the sealed verification clues; pending final staff verification.");
         saveSeeded(claims, owalaClaim);
 
         // Active Return Pass, ready to redeem live at the Front Office pickup desk.
@@ -199,7 +200,7 @@ public class SeedDataConfig {
         seedCaseMessage(caseMessages, "msg_owala_2", "claim_owala", "avery.chen@pleasantvalley.edu", "student",
                 "It has a yellow lightning-bolt sticker on the front and my initials under the lid.", "2026-03-10T09:12:00Z");
         seedCaseMessage(caseMessages, "msg_owala_3", "claim_owala", "avery.patel@pleasantvalley.edu", "admin",
-                "That matches our sealed verification note. Approved — your Return Pass is ready at the Front Office.", "2026-03-10T09:30:00Z");
+                "Thanks — that matches the sealed verification note. We're finalizing your claim; your Return Pass will be ready for pickup at the Front Office.", "2026-03-10T09:30:00Z");
 
         saveIfMissing(notifications, notification("notif_owala_match", "avery.chen@pleasantvalley.edu",
                 "Possible match available", "A navy Owala bottle may match your lost report.", "strong_item_match", "/UserDashboard", "found_owala"));
