@@ -27,7 +27,8 @@ public class ProofVaultController {
 
     @GetMapping("/api/items/{id}/proof-vault")
     public ProofVaultResponse getProofVault(@PathVariable String id, @RequestHeader(value = "X-Demo-User-Email", required = false) String userEmail) {
-        authorizationService.requireAdmin(userEmail);
+        // Staff review claims against sealed clues, so they need the proof vault too.
+        authorizationService.requireStaffOrAdmin(userEmail);
         return proofVaultService.getProofVault(id);
     }
 
@@ -44,7 +45,7 @@ public class ProofVaultController {
             @RequestBody EvidenceReviewRequest request,
             @RequestHeader(value = "X-Demo-User-Email", required = false) String userEmail
     ) {
-        authorizationService.requireAdmin(userEmail);
+        authorizationService.requireStaffOrAdmin(userEmail);
         return proofVaultService.reviewEvidence(claimId, request);
     }
 }

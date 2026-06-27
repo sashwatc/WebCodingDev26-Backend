@@ -22,7 +22,9 @@ public class AdminFoundItemController {
 
     @GetMapping
     public List<FoundItem> list(@RequestHeader(value = "X-Demo-User-Email", required = false) String userEmail) {
-        authorizationService.requireAdmin(userEmail);
+        // Staff moderate the found-item queue alongside admins, so they need the
+        // full (including pending) inventory list, not just the public view.
+        authorizationService.requireStaffOrAdmin(userEmail);
         return service.listAdmin();
     }
 }
