@@ -4,6 +4,7 @@ import com.FBLA.WebCodingDev26Backend.model.AppUser;
 import com.FBLA.WebCodingDev26Backend.model.AssetRegistryRecord;
 import com.FBLA.WebCodingDev26Backend.model.AuditLog;
 import com.FBLA.WebCodingDev26Backend.model.CampusZone;
+import com.FBLA.WebCodingDev26Backend.model.CaseMessage;
 import com.FBLA.WebCodingDev26Backend.model.Claim;
 import com.FBLA.WebCodingDev26Backend.model.FoundItem;
 import com.FBLA.WebCodingDev26Backend.model.ItemStatus;
@@ -18,6 +19,7 @@ import com.FBLA.WebCodingDev26Backend.repository.AppUserRepository;
 import com.FBLA.WebCodingDev26Backend.repository.AssetRegistryRecordRepository;
 import com.FBLA.WebCodingDev26Backend.repository.AuditLogRepository;
 import com.FBLA.WebCodingDev26Backend.repository.CampusZoneRepository;
+import com.FBLA.WebCodingDev26Backend.repository.CaseMessageRepository;
 import com.FBLA.WebCodingDev26Backend.repository.ClaimRepository;
 import com.FBLA.WebCodingDev26Backend.repository.FoundItemRepository;
 import com.FBLA.WebCodingDev26Backend.repository.LostReportRepository;
@@ -96,6 +98,158 @@ public class SeedDataConfig {
             boolean seedEnabled
     ) {
         return seedDataRunner(foundItems, lostReports, claims, notifications, auditLogs, users, null, null, null, null, null, null, null, null, null, null, null, seedEnabled);
+    }
+
+    /**
+     * Seeds the scripted live-demo narrative (Case 042 — Avery Chen's navy Owala
+     * bottle, end-to-end; and Case 041 — Jordan Lee's AirPods, the pre-seeded
+     * Case Chat / needs-info example). Runs as its own idempotent CommandLineRunner
+     * so every record is inserted only when absent — this self-heals onto an
+     * already-seeded database without touching the main seed or its tests.
+     */
+    @Bean
+    CommandLineRunner seedDemoNarrative(
+            FoundItemRepository foundItems,
+            LostReportRepository lostReports,
+            ClaimRepository claims,
+            NotificationRepository notifications,
+            ReturnPassRepository returnPasses,
+            CaseMessageRepository caseMessages,
+            AppUserRepository users,
+            @Value("${app.seed.enabled}") boolean seedEnabled
+    ) {
+        return args -> {
+            if (!seedEnabled) {
+                return;
+            }
+            try {
+                seedNarrativeShowcase(foundItems, lostReports, claims, notifications, returnPasses, caseMessages, users);
+            } catch (DataAccessException exception) {
+                LOGGER.warn("Skipping demo narrative seed because MongoDB is unavailable: {}", exception.getMessage());
+            }
+        };
+    }
+
+    private void seedNarrativeShowcase(
+            FoundItemRepository foundItems,
+            LostReportRepository lostReports,
+            ClaimRepository claims,
+            NotificationRepository notifications,
+            ReturnPassRepository returnPasses,
+            CaseMessageRepository caseMessages,
+            AppUserRepository users
+    ) {
+        // Demo students who own the two narrative cases (kept distinct from admin
+        // Avery Patel). They can sign in via demo mode with name + email.
+        if (users != null) {
+            users.save(user("user_avery_chen", "Avery Chen", "avery.chen@pleasantvalley.edu", "student"));
+            users.save(user("user_jordan_lee", "Jordan Lee", "jordan.lee@pleasantvalley.edu", "student"));
+        }
+
+        // ---- Case 042 — Avery Chen's navy Owala bottle (full recovery journey) ----
+        // CLAIM_PENDING keeps the item viewable on the public detail page (VERIFIED
+        // items are hidden by the privacy filter); the active Return Pass still
+        // redeems it to ARCHIVED live during the demo.
+        FoundItem owala = foundItem("found_owala", "Navy Owala FreeSip Water Bottle", "food_containers",
+                "Navy Owala FreeSip water bottle with a yellow lightning-bolt sticker on the front.",
+                "Navy", "Owala", "North Gym Lobby", "2026-03-09", "15:05", ItemStatus.CLAIM_PENDING, "FB-2026-OWL42");
+        owala.setTags(List.of("water bottle", "owala", "navy", "north gym", "freesip"));
+        owala.setPrivateVerificationClues(List.of(
+                "yellow lightning-bolt sticker on the front",
+                "small dent near the base",
+                "initials 'A.C.' written under the lid"));
+        owala.setStorageLocation("Front Office");
+        owala.setFinderName("Coach Miller");
+        owala.setFinderEmail("coach.miller@pleasantvalley.edu");
+        owala.setFinderRole("staff");
+        owala.setClaimConfirmed(true);
+        saveSeeded(foundItems, owala);
+
+        LostReport owalaLost = lostReport("lost_owala", "Lost navy Owala water bottle", "food_containers",
+                "Navy Owala FreeSip bottle with a yellow lightning sticker, last seen in the North Gym.",
+                "Navy", "Owala", "North Gym", "2026-03-09", "avery.chen@pleasantvalley.edu");
+        owalaLost.setContactName("Avery Chen");
+        owalaLost.setUrgency("high");
+        owalaLost.setMatchedItems(List.of(match("found_owala", "Navy Owala FreeSip Water Bottle", 96)));
+        saveSeeded(lostReports, owalaLost);
+
+        Claim owalaClaim = claim("claim_owala", "found_owala", "Avery Chen", "avery.chen@pleasantvalley.edu", "approved");
+        owalaClaim.setFoundItemTitle("Navy Owala FreeSip Water Bottle");
+        owalaClaim.setClaimReason("This is my navy Owala — I left it in the North Gym after practice.");
+        owalaClaim.setIdentifyingDetails("It has a yellow lightning-bolt sticker on the front and my initials under the lid.");
+        owalaClaim.setEvidenceChecklist(List.of("sticker on the front", "initials under the lid", "last seen North Gym"));
+        owalaClaim.setVerificationScore(96);
+        owalaClaim.setVerificationFlags(List.of("matches sealed clue", "specific hidden detail"));
+        owalaClaim.setVerificationSummary("Claim details match the sealed verification clues; ownership confirmed.");
+        owalaClaim.setReviewedBy("avery.patel@pleasantvalley.edu");
+        owalaClaim.setReviewedAt("2026-03-10T09:30:00Z");
+        saveSeeded(claims, owalaClaim);
+
+        // Active Return Pass, ready to redeem live at the Front Office pickup desk.
+        if (returnPasses != null && returnPasses.findById("pass_owala_active").isEmpty()) {
+            ReturnPass owalaPass = pass("pass_owala_active", "claim_owala", "found_owala", "avery.chen@pleasantvalley.edu", "active", "161803");
+            owalaPass.setPickupLocation("Front Office");
+            returnPasses.save(owalaPass);
+        }
+
+        // Case Chat history on Avery's claim: staff verification exchange.
+        seedCaseMessage(caseMessages, "msg_owala_1", "claim_owala", "avery.patel@pleasantvalley.edu", "admin",
+                "Thanks for your claim. Can you confirm a detail only the owner would know about the bottle?", "2026-03-10T09:05:00Z");
+        seedCaseMessage(caseMessages, "msg_owala_2", "claim_owala", "avery.chen@pleasantvalley.edu", "student",
+                "It has a yellow lightning-bolt sticker on the front and my initials under the lid.", "2026-03-10T09:12:00Z");
+        seedCaseMessage(caseMessages, "msg_owala_3", "claim_owala", "avery.patel@pleasantvalley.edu", "admin",
+                "That matches our sealed verification note. Approved — your Return Pass is ready at the Front Office.", "2026-03-10T09:30:00Z");
+
+        saveIfMissing(notifications, notification("notif_owala_match", "avery.chen@pleasantvalley.edu",
+                "Possible match available", "A navy Owala bottle may match your lost report.", "strong_item_match", "/UserDashboard", "found_owala"));
+        saveIfMissing(notifications, notification("notif_owala_pass", "avery.chen@pleasantvalley.edu",
+                "Return Pass ready", "Your Return Pass for the navy Owala bottle is ready for pickup at the Front Office.", "return_pass_ready", "/UserDashboard", "found_owala"));
+
+        // ---- Case 041 — Jordan Lee's AirPods (pre-seeded Case Chat / needs-info) ----
+        FoundItem airpods = foundItem("found_airpods_041", "White AirPods Pro Case", "electronics",
+                "White AirPods Pro charging case found after the basketball game.",
+                "White", "Apple", "Gym Bleachers", "2026-03-14", "20:45", ItemStatus.CLAIM_PENDING, "FB-2026-APD41");
+        airpods.setTags(List.of("airpods", "apple", "white", "earbuds"));
+        airpods.setPrivateVerificationClues(List.of("hairline scratch on the lid", "engraved initials 'J.L.' inside"));
+        airpods.setStorageLocation("Main Office sealed bin A3");
+        airpods.setFinderName("Coach Miller");
+        airpods.setFinderEmail("coach.miller@pleasantvalley.edu");
+        airpods.setFinderRole("staff");
+        airpods.setPhotoUrls(List.of("/items/airpods-pro-case.png"));
+        saveSeeded(foundItems, airpods);
+
+        Claim airpodsClaim = claim("claim_airpods_041", "found_airpods_041", "Jordan Lee", "jordan.lee@pleasantvalley.edu", "need_more_info");
+        airpodsClaim.setFoundItemTitle("White AirPods Pro Case");
+        airpodsClaim.setClaimReason("I lost my AirPods Pro at the basketball game.");
+        airpodsClaim.setIdentifyingDetails("White AirPods Pro case.");
+        airpodsClaim.setAdminNotes("Ask the claimant to confirm a hidden marking before approving.");
+        airpodsClaim.setEvidenceChecklist(List.of("hidden marking", "engraving", "last seen location"));
+        airpodsClaim.setVerificationScore(58);
+        airpodsClaim.setVerificationFlags(List.of("needs one more private detail"));
+        airpodsClaim.setVerificationSummary("Partial match — one more private verification detail is needed.");
+        saveSeeded(claims, airpodsClaim);
+
+        // One staff message; the claim sits in need_more_info awaiting the student's reply.
+        seedCaseMessage(caseMessages, "msg_ap041_1", "claim_airpods_041", "staff.demo@pleasantvalley.edu", "staff",
+                "Thanks for the claim. Can you describe any hidden marking or engraving on the case?", "2026-03-14T21:00:00Z");
+
+        saveIfMissing(notifications, notification("notif_ap041_info", "jordan.lee@pleasantvalley.edu",
+                "More info needed", "Staff requested one more detail for your AirPods claim.", "claim_more_info", "/UserDashboard", "found_airpods_041"));
+    }
+
+    private void seedCaseMessage(CaseMessageRepository repository, String id, String claimId, String senderId, String senderRole, String message, String createdAt) {
+        if (repository == null || repository.findById(id).isPresent()) {
+            return;
+        }
+        CaseMessage msg = new CaseMessage();
+        msg.setId(id);
+        msg.setClaimId(claimId);
+        msg.setSenderId(senderId);
+        msg.setSenderRole(senderRole);
+        msg.setMessage(message);
+        msg.setCreatedAt(createdAt);
+        msg.setIsRead(false);
+        repository.save(msg);
     }
 
     private CommandLineRunner seedDataRunner(
