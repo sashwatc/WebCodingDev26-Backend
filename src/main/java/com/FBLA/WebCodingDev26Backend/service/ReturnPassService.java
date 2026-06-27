@@ -209,14 +209,13 @@ public class ReturnPassService {
             recoveryPulse.itemReturned(saved);
         }
 
-        // The claim is now approved AND completed, so the item's lifecycle is
-        // finished. Snapshot the response first, then cascade-delete the item and
-        // every record that references it so nothing orphaned remains anywhere.
-        ReturnPassResponse response = ReturnPassResponse.from(saved);
-        if (completionCleanup != null) {
-            completionCleanup.purgeCompletedItem(item.getId());
-        }
-        return response;
+        // Redemption leaves the item in the ARCHIVED state as a persistent
+        // completed recovery record (still visible in history, the admin dashboard,
+        // and the custody ledger). Cascade cleanup is NOT run automatically here —
+        // it is reserved for an explicit admin "remove completed item" action via
+        // CompletionCleanupService.purgeCompletedItem (see ClaimController /
+        // AdminWorkflowService), so the final archived record persists after pickup.
+        return ReturnPassResponse.from(saved);
     }
 
     public ReturnPassResponse redeemByCode(ReturnPassRedeemRequest request, AppUser admin) {
