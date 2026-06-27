@@ -191,10 +191,29 @@ public class SeedDataConfig {
         saveSeeded(claims, owalaClaim);
 
         // Active Return Pass, ready to redeem live at the Front Office pickup desk.
-        if (returnPasses != null && returnPasses.findById("pass_owala_active").isEmpty()) {
+        // Overwritten on every startup so a rehearsal that redeems the pass is fully
+        // restored by a simple restart (status reset to active, redeemed fields cleared).
+        if (returnPasses != null) {
             ReturnPass owalaPass = pass("pass_owala_active", "claim_owala", "found_owala", "avery.chen@pleasantvalley.edu", "active", "161803");
             owalaPass.setPickupLocation("Front Office");
             returnPasses.save(owalaPass);
+
+            // Restore the calculator backup pass + item to a redeemable state on every
+            // startup (backup PIN 314159). Redemption now archives rather than deletes,
+            // and these backup records are not otherwise re-seeded on a populated DB.
+            returnPasses.findById("pass_calculator_active").ifPresent(p -> {
+                p.setStatus("active");
+                p.setRedeemedAt(null);
+                p.setRedeemedBy(null);
+                returnPasses.save(p);
+            });
+            if (foundItems != null) {
+                foundItems.findById("found_claimed_calculator").ifPresent(it -> {
+                    it.setStatus(ItemStatus.VERIFIED);
+                    it.setClaimConfirmed(false);
+                    foundItems.save(it);
+                });
+            }
         }
 
         // Case Chat history on Avery's claim: staff verification exchange.
