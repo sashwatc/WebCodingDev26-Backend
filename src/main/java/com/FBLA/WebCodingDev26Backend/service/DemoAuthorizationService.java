@@ -59,6 +59,9 @@ public class DemoAuthorizationService {
         if (resolved.invalidSession()) {
             throw new ForbiddenException("Your session is invalid or has expired. Sign in again.");
         }
+        if (resolved.suspended()) {
+            throw new ForbiddenException("Your account has been suspended. Contact school staff.");
+        }
         if (resolved.user() == null || !resolved.admin()) {
             throw new ForbiddenException("Admin access is required.");
         }
@@ -67,13 +70,16 @@ public class DemoAuthorizationService {
 
     public boolean isAdmin(String demoEmailHeader) {
         Resolved resolved = resolveCached(demoEmailHeader);
-        return !resolved.invalidSession() && resolved.user() != null && resolved.admin();
+        return !resolved.invalidSession() && !resolved.suspended() && resolved.user() != null && resolved.admin();
     }
 
     public AppUser requireStaffOrAdmin(String demoEmailHeader) {
         Resolved resolved = resolveCached(demoEmailHeader);
         if (resolved.invalidSession()) {
             throw new ForbiddenException("Your session is invalid or has expired. Sign in again.");
+        }
+        if (resolved.suspended()) {
+            throw new ForbiddenException("Your account has been suspended. Contact school staff.");
         }
         if (resolved.user() == null) {
             throw new ForbiddenException("Staff or admin access is required.");
@@ -87,24 +93,29 @@ public class DemoAuthorizationService {
 
     public boolean isStaffOrAdmin(String demoEmailHeader) {
         Resolved resolved = resolveCached(demoEmailHeader);
-        if (resolved.invalidSession() || resolved.user() == null) return false;
+        if (resolved.invalidSession() || resolved.suspended() || resolved.user() == null) return false;
         String role = resolved.user().getRole();
         return "admin".equalsIgnoreCase(role) || "staff".equalsIgnoreCase(role);
     }
 
-    /** Returns the resolved backend user for the current request, or null when unauthenticated. */
-    public AppUser currentUser(String demoEmailHeader) {
-        Resolved resolved = resolveCached(demoEmailHeader);
-        return resolved.invalidSession() ? null : resolved.user();
+    /** True when the current caller's account is suspended. */
+    public boolean isSuspended(String demoEmailHeader) {
+        return resolveCached(demoEmailHeader).suspended();
     }
 
-    /** Returns the verified email for the current caller, falling back to the demo header. */
+    /** Returns the resolved backend user for the current request, or null when unauthenticated or suspended. */
+    public AppUser currentUser(String demoEmailHeader) {
+        Resolved resolved = resolveCached(demoEmailHeader);
+        return resolved.invalidSession() || resolved.suspended() ? null : resolved.user();
+    }
+
+    /** Returns the verified email for the current caller, falling back to the demo header. Blank when suspended. */
     public String resolveEmail(String demoEmailHeader) {
         Resolved resolved = resolveCached(demoEmailHeader);
-        if (resolved.invalidSession()) {
+        if (resolved.invalidSession() || resolved.suspended()) {
             return "";
         }
-        if (!resolved.invalidSession() && !resolved.email().isBlank()) {
+        if (!resolved.email().isBlank()) {
             return resolved.email();
         }
         return normalize(demoEmailHeader);
@@ -137,7 +148,7 @@ public class DemoAuthorizationService {
                     ? appwrite.isMemberOfAdminTeam(jwt)
                     : verified.normalizedEmail().equals(adminEmail);
             AppUser user = authService.upsertFromVerifiedIdentity(verified.id(), verified.email(), verified.name(), admin);
-            return new Resolved(user, admin, user.getEmail(), false);
+            return new Resolved(user, admin, user.getEmail(), false, isSuspendedRole(user));
         }
 
         if (!demoFallbackEnabled) {
@@ -156,9 +167,14 @@ public class DemoAuthorizationService {
                             user,
                             "admin".equalsIgnoreCase(user.getRole()) || email.equals(adminEmail),
                             user.getEmail(),
-                            false);
+                            false,
+                            isSuspendedRole(user));
                 })
                 .orElseGet(Resolved::none);
+    }
+
+    private boolean isSuspendedRole(AppUser user) {
+        return user != null && "suspended".equalsIgnoreCase(user.getRole());
     }
 
     private String currentJwt() {
@@ -191,13 +207,13 @@ public class DemoAuthorizationService {
         return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
     }
 
-    private record Resolved(AppUser user, boolean admin, String email, boolean invalidSession) {
+    private record Resolved(AppUser user, boolean admin, String email, boolean invalidSession, boolean suspended) {
         static Resolved none() {
-            return new Resolved(null, false, "", false);
+            return new Resolved(null, false, "", false, false);
         }
 
         static Resolved invalid() {
-            return new Resolved(null, false, "", true);
+            return new Resolved(null, false, "", true, false);
         }
     }
 }

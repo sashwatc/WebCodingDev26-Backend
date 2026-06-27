@@ -176,6 +176,17 @@ public class ClaimController {
         msg.setSenderRole(senderRole);
         msg.setMessage(message);
         msg.setCreatedAt(Instant.now().toString());
+
+        // When the claimant replies to a "need_more_info" claim, move it back into
+        // the staff review queue so the additional information gets re-evaluated.
+        if (!authorizationService.isStaffOrAdmin(userEmail)
+                && claim.getStatus() != null
+                && "need_more_info".equalsIgnoreCase(claim.getStatus().trim())) {
+            claim.setStatus("under_review");
+            claim.setUpdatedDate(Instant.now().toString());
+            claims.save(claim);
+        }
+
         if (caseMessages == null) {
             return msg;
         }
