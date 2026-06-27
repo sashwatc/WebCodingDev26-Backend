@@ -154,6 +154,7 @@ public class SeedDataConfig {
                 "Navy Owala FreeSip water bottle with a yellow lightning-bolt sticker on the front.",
                 "Navy", "Owala", "North Gym Lobby", "2026-03-09", "15:05", ItemStatus.CLAIM_PENDING, "FB-2026-OWL42");
         owala.setTags(List.of("water bottle", "owala", "navy", "north gym", "freesip"));
+        owala.setPhotoUrls(List.of("/items/navy-owala-bottle.svg"));
         owala.setPrivateVerificationClues(List.of(
                 "yellow lightning-bolt sticker on the front",
                 "small dent near the base",
