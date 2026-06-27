@@ -52,6 +52,17 @@ public class AdminDashboardController {
         return workflow.dashboard();
     }
 
+    /**
+     * The Recovery Center summary is an optional aggregation; the demo backend does
+     * not maintain it, so return an empty object (instead of 404). The dashboard
+     * treats an absent summary by deriving counts from claims and lost reports.
+     */
+    @GetMapping("/recovery-center")
+    public Map<String, Object> recoveryCenter(@RequestHeader(value = "X-Demo-User-Email", required = false) String userEmail) {
+        authorizationService.requireStaffOrAdmin(userEmail);
+        return Map.of();
+    }
+
     @GetMapping("/lost-reports")
     public List<?> lostReports(@RequestHeader(value = "X-Demo-User-Email", required = false) String userEmail) {
         authorizationService.requireStaffOrAdmin(userEmail);

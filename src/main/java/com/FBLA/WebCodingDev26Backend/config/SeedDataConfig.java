@@ -156,7 +156,6 @@ public class SeedDataConfig {
                 seedCustody(custodyLedgerService);
                 seedRealisticActivity(foundItems, lostReports, claims, notifications);
 
-                notifications.save(notification("notif_001", "jordan.kim@pleasantvalley.edu", "Strong match available", "A strong possible match is ready for review.", "strong_item_match", "/UserDashboard", "found_002"));
                 notifications.save(notification("notif_return_pass_demo", "riley.chen@pleasantvalley.edu", "Return Pass ready", "Your Return Pass is ready. Open Lost Then Found for secure pickup instructions.", "return_pass_ready", "/return-pass/pass_calculator_active", "found_claimed_calculator"));
                 notifications.save(notification("notif_pattern_review_demo", "avery.patel@pleasantvalley.edu", "Pattern Review alert", "A loss pattern needs admin review.", "pattern_review_alert", "/admin/pattern-review", "alert_demo_pattern"));
                 seedNotificationDeliveries(notificationDeliveries);
@@ -206,10 +205,8 @@ public class SeedDataConfig {
         bottle.setFinderEmail("coach.miller@pleasantvalley.edu");
         bottle.setFinderRole("staff");
 
-        FoundItem backpack = foundItem("found_002", "Blue JanSport Backpack", "bags_cases", "Royal blue JanSport backpack with math notebook and tennis keychain.", "Blue", "JanSport", "Student Lounge", "2026-03-09", "15:05", ItemStatus.VERIFIED, "FB-2026-JS27");
-        backpack.setPhotoUrls(List.of("/images/blue-backpack.png"));
-        backpack.setTags(List.of("backpack", "jansport", "blue", "student lounge"));
-        backpack.setStorageLocation("Counselor office storage closet");
+        // found_002 (Blue JanSport Backpack) lives in seedRealisticActivity instead,
+        // so it is also added to databases that were already seeded by an older build.
 
         FoundItem airpods = foundItem("found_airpods_game", "Black AirPods-style Case", "electronics", "Black wireless earbud case found after the basketball game.", "Black", "Apple", "Gym Bleachers", "2026-03-14", "20:40", ItemStatus.FOUND, "FB-2026-AP14");
         airpods.setEventHubId("hub_basketball_game");
@@ -261,7 +258,7 @@ public class SeedDataConfig {
         umbrella.setTags(List.of("umbrella", "red", "compact", "library"));
         umbrella.setStorageLocation("Main Office shelf B3");
 
-        foundItems.saveAll(List.of(bottle, backpack, airpods, calculator, passItem, returned, chromebook, hoodie, umbrella));
+        foundItems.saveAll(List.of(bottle, airpods, calculator, passItem, returned, chromebook, hoodie, umbrella));
     }
 
     private void seedRealisticActivity(
@@ -377,6 +374,14 @@ public class SeedDataConfig {
         saveSeeded(foundItems, soccerCleats);
         saveSeeded(foundItems, pearlEarring);
         saveSeeded(foundItems, mouthpiece);
+
+        // Jordan's recovered backpack (claimed via claim_001). Kept here in the
+        // insert-if-absent path so it also lands on already-seeded databases.
+        FoundItem backpack = foundItem("found_002", "Blue JanSport Backpack", "bags_cases", "Royal blue JanSport backpack with math notebook and tennis keychain.", "Blue", "JanSport", "Student Lounge", "2026-03-09", "15:05", ItemStatus.VERIFIED, "FB-2026-JS27");
+        backpack.setPhotoUrls(List.of("/images/blue-backpack.png"));
+        backpack.setTags(List.of("backpack", "jansport", "blue", "student lounge"));
+        backpack.setStorageLocation("Counselor office storage closet");
+        saveSeeded(foundItems, backpack);
 
         LostReport chargerReport = lostReport("lost_usbc_charger", "Lost white USB-C charger", "electronics", "White USB-C charger and cable left near the cafeteria charging rail.", "White", "Apple", "Cafeteria", "2026-03-16", "sophia.nguyen@pleasantvalley.edu");
         chargerReport.setContactName("Sophia Nguyen");
@@ -500,6 +505,13 @@ public class SeedDataConfig {
         soccerRejected.setRiskFlags(List.of("details conflict with intake clues", "demo record"));
         saveSeeded(claims, soccerRejected);
 
+        // Jordan's approved backpack claim. The title is carried on the claim so the
+        // claimant dashboard renders the card even though the now-VERIFIED item is
+        // hidden from the public item endpoint.
+        Claim approvedBackpack = claim("claim_001", "found_002", "Jordan Kim", "jordan.kim@pleasantvalley.edu", "approved");
+        approvedBackpack.setFoundItemTitle("Blue JanSport Backpack");
+        saveSeeded(claims, approvedBackpack);
+
         saveIfMissing(notifications, notification("notif_charger_match", "sophia.nguyen@pleasantvalley.edu", "Possible charger match", "A white USB-C charger may match your lost report.", "strong_item_match", "/UserDashboard", "found_usbc_charger"));
         saveIfMissing(notifications, notification("notif_textbook_info", "jordan.kim@pleasantvalley.edu", "More info needed", "Staff requested one more detail for your AP Biology textbook claim.", "claim_more_info", "/claims/claim_textbook_needs_info", "found_ap_biology_textbook"));
         saveIfMissing(notifications, notification("notif_sunglasses_reviewed", "mia.rodriguez@pleasantvalley.edu", "Claim reviewed", "Staff reviewed the sunglasses claim and left a decision.", "claim_reviewed", "/claims/claim_sunglasses_rejected", "found_rayban_sunglasses"));
@@ -507,6 +519,7 @@ public class SeedDataConfig {
         saveIfMissing(notifications, notification("notif_debate_more_info", "emma.wilson@pleasantvalley.edu", "More info needed", "Staff need one more private detail before approving the debate folder claim.", "claim_more_info_requested", "/claim?item=found_debate_folder", "found_debate_folder"));
         saveIfMissing(notifications, notification("notif_clarinet_match", "noah.anderson@pleasantvalley.edu", "Possible match found", "A clarinet mouthpiece case may match your lost report.", "strong_item_match", "/browse", "found_clarinet_mouthpiece"));
         saveIfMissing(notifications, notification("notif_earring_review", "hannah.lee@pleasantvalley.edu", "Jewelry claim received", "Your earring claim is queued for staff review.", "claim_review", "/claim?item=found_pearl_earring", "found_pearl_earring"));
+        saveIfMissing(notifications, notification("notif_001", "jordan.kim@pleasantvalley.edu", "Strong match available", "A strong possible match is ready for review.", "strong_item_match", "/UserDashboard", "found_002"));
     }
 
     private void seedLostReports(LostReportRepository lostReports) {
@@ -530,9 +543,8 @@ public class SeedDataConfig {
     }
 
     private void seedClaims(ClaimRepository claims) {
-        Claim claim = claim("claim_001", "found_002", "Jordan Kim", "jordan.kim@pleasantvalley.edu", "approved");
-        claims.save(claim);
-
+        // claim_001 (Jordan's approved backpack claim) lives in seedRealisticActivity
+        // so it also lands on already-seeded databases.
         Claim review = claim("claim_airpods_review", "found_airpods_game", "Mia Rodriguez", "mia.rodriguez@pleasantvalley.edu", "pending_review");
         review.setEvidenceChecklist(List.of("hidden mark", "case condition", "last known location"));
         review.setPrivateEvidenceResponses(java.util.Map.of("hidden_mark", "silver initials on the hinge", "condition", "scratch on the back corner"));
@@ -602,6 +614,11 @@ public class SeedDataConfig {
 
     private void seedCustody(CustodyLedgerService custodyLedgerService) {
         if (custodyLedgerService == null) {
+            return;
+        }
+        // Custody events are an append-only ledger, so guard against re-seeding to
+        // avoid duplicate chains when the full seed runs on a non-empty database.
+        if (!custodyLedgerService.list("found_airpods_game").isEmpty()) {
             return;
         }
         custodyLedgerService.appendEvent("found_airpods_game", "intake_created", "coach.miller@pleasantvalley.edu", "staff", "Main Office sealed bin A1", "Event item intake created.", null);

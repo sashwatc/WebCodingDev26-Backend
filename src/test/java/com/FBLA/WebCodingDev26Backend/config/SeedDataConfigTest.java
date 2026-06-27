@@ -53,7 +53,7 @@ class SeedDataConfigTest {
         runner.run();
 
         verify(foundItems).saveAll(ArgumentMatchers.<FoundItem>anyIterable());
-        verify(foundItems, times(11)).save(any(FoundItem.class));
+        verify(foundItems, times(12)).save(any(FoundItem.class));
         verify(lostReports, times(12)).save(any(LostReport.class));
         verify(claims, times(10)).save(any(Claim.class));
         verify(notifications, times(10)).save(any(Notification.class));
@@ -72,10 +72,10 @@ class SeedDataConfigTest {
         runner.run();
 
         verify(foundItems, never()).saveAll(ArgumentMatchers.<FoundItem>anyIterable());
-        verify(foundItems, times(11)).save(any(FoundItem.class));
+        verify(foundItems, times(12)).save(any(FoundItem.class));
         verify(lostReports, times(9)).save(any(LostReport.class));
-        verify(claims, times(6)).save(any(Claim.class));
-        verify(notifications, times(7)).save(any(Notification.class));
+        verify(claims, times(7)).save(any(Claim.class));
+        verify(notifications, times(8)).save(any(Notification.class));
     }
 
     @Test
@@ -101,7 +101,7 @@ class SeedDataConfigTest {
         verify(foundItems, never()).save(any(FoundItem.class));
         verify(lostReports, never()).save(any(LostReport.class));
         verify(claims, never()).save(any(Claim.class));
-        verify(notifications, times(7)).save(any(Notification.class));
+        verify(notifications, times(8)).save(any(Notification.class));
     }
 
     @Test

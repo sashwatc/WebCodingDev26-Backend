@@ -258,7 +258,7 @@ class ApiIntegrationTests {
         FoundItem adminItem = foundItem("found_admin");
         adminItem.setStorageLocation("Main Office shelf A");
 
-        when(authorizationService.requireAdmin("avery.patel@pleasantvalley.edu"))
+        when(authorizationService.requireStaffOrAdmin("avery.patel@pleasantvalley.edu"))
                 .thenReturn(user("user_admin", "Avery Patel", "avery.patel@pleasantvalley.edu", "admin"));
         when(foundItemService.listAdmin()).thenReturn(List.of(adminItem));
 

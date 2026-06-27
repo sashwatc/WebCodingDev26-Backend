@@ -45,6 +45,17 @@ public class RecoveryCaseController {
         return recoveryCases.get(id);
     }
 
+    /**
+     * Staff missions for a recovery case are an optional planning layer the demo
+     * backend does not persist. Return an empty list (instead of 404) so the
+     * recovery dashboard renders its "no missions" empty state cleanly.
+     */
+    @GetMapping("/{id}/missions")
+    public List<Object> missions(@PathVariable String id, @RequestHeader(value = "X-Demo-User-Email", required = false) String userEmail) {
+        authorization.requireStaffOrAdmin(userEmail);
+        return List.of();
+    }
+
     /** The owner of a lost report (or staff) can view its recovery case; the case is opened on first view. */
     @GetMapping("/lost-reports/{lostReportId}")
     public RecoveryCase byLostReport(
