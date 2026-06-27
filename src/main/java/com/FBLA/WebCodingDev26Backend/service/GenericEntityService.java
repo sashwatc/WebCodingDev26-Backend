@@ -45,6 +45,7 @@ public class GenericEntityService {
     private final CustodyLedgerService custodyLedgerService;
     private final InputSanitizer sanitizer;
     private final RecoveryPulseDispatcher recoveryPulse;
+    private final StrongMatchAutoApprovalService autoApproval;
 
     public GenericEntityService(
             LostReportRepository lostReports,
@@ -54,7 +55,7 @@ public class GenericEntityService {
             PatchMapper mapper,
             ClockService clock
     ) {
-        this(lostReports, claims, notifications, auditLogs, mapper, clock, null, null, null, null, null, new InputSanitizer(), null);
+        this(lostReports, claims, notifications, auditLogs, mapper, clock, null, null, null, null, null, new InputSanitizer(), null, null);
     }
 
     public GenericEntityService(
@@ -66,7 +67,7 @@ public class GenericEntityService {
             ClockService clock,
             WorkflowService workflow
     ) {
-        this(lostReports, claims, notifications, auditLogs, mapper, clock, workflow, null, null, null, null, new InputSanitizer(), null);
+        this(lostReports, claims, notifications, auditLogs, mapper, clock, workflow, null, null, null, null, new InputSanitizer(), null, null);
     }
 
     public GenericEntityService(
@@ -81,7 +82,7 @@ public class GenericEntityService {
             RecoveryCaseService recoveryCaseService,
             CustodyLedgerService custodyLedgerService
     ) {
-        this(lostReports, claims, notifications, auditLogs, mapper, clock, null, matchmakingService, foundItems, recoveryCaseService, custodyLedgerService, new InputSanitizer(), null);
+        this(lostReports, claims, notifications, auditLogs, mapper, clock, null, matchmakingService, foundItems, recoveryCaseService, custodyLedgerService, new InputSanitizer(), null, null);
     }
 
     @Autowired
@@ -98,7 +99,8 @@ public class GenericEntityService {
             RecoveryCaseService recoveryCaseService,
             CustodyLedgerService custodyLedgerService,
             InputSanitizer sanitizer,
-            RecoveryPulseDispatcher recoveryPulse
+            RecoveryPulseDispatcher recoveryPulse,
+            StrongMatchAutoApprovalService autoApproval
     ) {
         this.lostReports = lostReports;
         this.claims = claims;
@@ -113,6 +115,7 @@ public class GenericEntityService {
         this.custodyLedgerService = custodyLedgerService;
         this.sanitizer = sanitizer;
         this.recoveryPulse = recoveryPulse;
+        this.autoApproval = autoApproval;
     }
 
     public List<?> list(String entityName) {
@@ -143,6 +146,15 @@ public class GenericEntityService {
             appendClaimCustodyEvent(claim, "claim_submitted");
             if (recoveryPulse != null) {
                 recoveryPulse.claimSubmitted(claim);
+            }
+            // If this claim matches an admin-merged strong match for the same owner,
+            // auto-approve it and start the return process; otherwise leave it for
+            // normal manual review.
+            if (autoApproval != null) {
+                Claim autoApproved = autoApproval.maybeAutoApprove(claim);
+                if (autoApproved != null) {
+                    return autoApproved;
+                }
             }
         }
         return saved;

@@ -37,6 +37,7 @@ public class ReturnPassService {
     private final RecoveryCaseService recoveryCaseService;
     private final ClockService clock;
     private final RecoveryPulseDispatcher recoveryPulse;
+    private final CompletionCleanupService completionCleanup;
     private final SecureRandom random = new SecureRandom();
     private final BCryptPasswordEncoder bcrypt = new BCryptPasswordEncoder();
 
@@ -49,7 +50,7 @@ public class ReturnPassService {
             RecoveryCaseService recoveryCaseService,
             ClockService clock
     ) {
-        this(returnPasses, claims, foundItems, notifications, custodyLedgerService, recoveryCaseService, clock, null);
+        this(returnPasses, claims, foundItems, notifications, custodyLedgerService, recoveryCaseService, clock, null, null);
     }
 
     @Autowired
@@ -61,7 +62,8 @@ public class ReturnPassService {
             CustodyLedgerService custodyLedgerService,
             RecoveryCaseService recoveryCaseService,
             ClockService clock,
-            RecoveryPulseDispatcher recoveryPulse
+            RecoveryPulseDispatcher recoveryPulse,
+            CompletionCleanupService completionCleanup
     ) {
         this.returnPasses = returnPasses;
         this.claims = claims;
@@ -70,6 +72,7 @@ public class ReturnPassService {
         this.recoveryCaseService = recoveryCaseService;
         this.clock = clock;
         this.recoveryPulse = recoveryPulse;
+        this.completionCleanup = completionCleanup;
     }
 
     public ReturnPassResponse create(String claimId, ReturnPassRequest request, AppUser admin) {
@@ -205,7 +208,15 @@ public class ReturnPassService {
         if (recoveryPulse != null) {
             recoveryPulse.itemReturned(saved);
         }
-        return ReturnPassResponse.from(saved);
+
+        // The claim is now approved AND completed, so the item's lifecycle is
+        // finished. Snapshot the response first, then cascade-delete the item and
+        // every record that references it so nothing orphaned remains anywhere.
+        ReturnPassResponse response = ReturnPassResponse.from(saved);
+        if (completionCleanup != null) {
+            completionCleanup.purgeCompletedItem(item.getId());
+        }
+        return response;
     }
 
     public ReturnPassResponse redeemByCode(ReturnPassRedeemRequest request, AppUser admin) {

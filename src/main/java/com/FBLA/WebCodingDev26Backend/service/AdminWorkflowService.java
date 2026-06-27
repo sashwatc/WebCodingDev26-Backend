@@ -32,6 +32,7 @@ public class AdminWorkflowService {
     private final EmailNotificationService emailNotifications;
     private final ClockService clock;
     private final InputSanitizer sanitizer;
+    private final CompletionCleanupService completionCleanup;
 
     public AdminWorkflowService(
             FoundItemRepository foundItems,
@@ -42,7 +43,8 @@ public class AdminWorkflowService {
             NotificationRepository notifications,
             EmailNotificationService emailNotifications,
             ClockService clock,
-            InputSanitizer sanitizer
+            InputSanitizer sanitizer,
+            CompletionCleanupService completionCleanup
     ) {
         this.foundItems = foundItems;
         this.lostReports = lostReports;
@@ -53,6 +55,7 @@ public class AdminWorkflowService {
         this.emailNotifications = emailNotifications;
         this.clock = clock;
         this.sanitizer = sanitizer;
+        this.completionCleanup = completionCleanup;
     }
 
     public Map<String, Object> dashboard() {
@@ -115,6 +118,50 @@ public class AdminWorkflowService {
         audit("CLAIM_APPROVED", "Claim", savedClaim.getId(), admin.getEmail(),
                 "Approved claim for found item " + item.getId() + ".",
                 admin.getRole() + " approved " + savedClaim.getClaimantName() + "'s claim for " + item.getTitle());
+        return savedClaim;
+    }
+
+    /**
+     * Staff completes the hand-off for an approved claim. Mirrors the student
+     * "confirm receipt" and the Return Pass redeem: marks the claim completed,
+     * archives the item, and — because the claim is now approved AND completed —
+     * cascade-deletes the item and everything referencing it so no path can leave
+     * an approved+completed item lingering in the dashboard.
+     */
+    public Claim completeClaim(String claimId, AppUser admin, Map<String, Object> data) {
+        Claim claim = claims.findById(claimId).orElseThrow(() -> new NotFoundException("Claim not found"));
+        String now = clock.now();
+
+        claim.setStatus("completed");
+        if (claim.getReceivedConfirmedAt() == null || claim.getReceivedConfirmedAt().isBlank()) {
+            claim.setReceivedConfirmedAt(now);
+        }
+        claim.setAdminNotes(noteFrom(data, "Hand-off completed by staff."));
+        claim.setUpdatedDate(now);
+        Claim savedClaim = claims.save(claim);
+
+        String foundItemId = claim.getFoundItemId();
+        if (foundItemId != null) {
+            foundItems.findById(foundItemId).ifPresent(item -> {
+                item.setStatus(ItemStatus.ARCHIVED);
+                item.setClaimConfirmed(true);
+                item.setClaimConfirmedAt(now);
+                item.setUpdatedDate(now);
+                foundItems.save(item);
+            });
+        }
+
+        audit("CLAIM_COMPLETED", "Claim", savedClaim.getId(), admin.getEmail(),
+                "Completed hand-off for found item " + foundItemId + ".",
+                admin.getRole() + " completed " + savedClaim.getClaimantName() + "'s claim.");
+
+        if (completionCleanup != null) {
+            try {
+                completionCleanup.purgeCompletedItem(foundItemId);
+            } catch (RuntimeException ignored) {
+                // Best-effort cascade; the claim is already marked completed.
+            }
+        }
         return savedClaim;
     }
 

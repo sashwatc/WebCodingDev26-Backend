@@ -86,6 +86,16 @@ public class AdminDashboardController {
         return workflow.approveClaim(id, admin, data);
     }
 
+    @PostMapping("/claims/{id}/complete")
+    public Claim completeClaim(
+            @PathVariable String id,
+            @RequestHeader(value = "X-Demo-User-Email", required = false) String userEmail,
+            @RequestBody(required = false) Map<String, Object> data
+    ) {
+        AppUser admin = authorizationService.requireStaffOrAdmin(userEmail);
+        return workflow.completeClaim(id, admin, data);
+    }
+
     @PostMapping("/claims/{id}/deny")
     public Claim denyClaim(
             @PathVariable String id,

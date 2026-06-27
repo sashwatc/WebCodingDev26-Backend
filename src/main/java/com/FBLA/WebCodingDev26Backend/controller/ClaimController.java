@@ -6,11 +6,15 @@ import com.FBLA.WebCodingDev26Backend.exception.NotFoundException;
 import com.FBLA.WebCodingDev26Backend.model.AppUser;
 import com.FBLA.WebCodingDev26Backend.model.CaseMessage;
 import com.FBLA.WebCodingDev26Backend.model.Claim;
+import com.FBLA.WebCodingDev26Backend.model.FoundItem;
+import com.FBLA.WebCodingDev26Backend.model.ItemStatus;
 import com.FBLA.WebCodingDev26Backend.model.Rating;
 import com.FBLA.WebCodingDev26Backend.repository.CaseMessageRepository;
 import com.FBLA.WebCodingDev26Backend.repository.ClaimRepository;
 import com.FBLA.WebCodingDev26Backend.repository.FoundItemRepository;
+import com.FBLA.WebCodingDev26Backend.service.CompletionCleanupService;
 import com.FBLA.WebCodingDev26Backend.service.DemoAuthorizationService;
+import com.FBLA.WebCodingDev26Backend.service.RecoveryCaseService;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -34,18 +38,29 @@ public class ClaimController {
     private final CaseMessageRepository caseMessages;
     private final DemoAuthorizationService authorizationService;
     private final FoundItemRepository foundItems;
+    private final RecoveryCaseService recoveryCaseService;
+    private final CompletionCleanupService completionCleanup;
 
     @Autowired
-    public ClaimController(ClaimRepository claims, CaseMessageRepository caseMessages, DemoAuthorizationService authorizationService, FoundItemRepository foundItems) {
+    public ClaimController(
+            ClaimRepository claims,
+            CaseMessageRepository caseMessages,
+            DemoAuthorizationService authorizationService,
+            FoundItemRepository foundItems,
+            RecoveryCaseService recoveryCaseService,
+            CompletionCleanupService completionCleanup
+    ) {
         this.claims = claims;
         this.caseMessages = caseMessages;
         this.authorizationService = authorizationService;
         this.foundItems = foundItems;
+        this.recoveryCaseService = recoveryCaseService;
+        this.completionCleanup = completionCleanup;
     }
 
     // Package-private constructor for test compatibility
     ClaimController(ClaimRepository claims, DemoAuthorizationService authorizationService) {
-        this(claims, null, authorizationService, null);
+        this(claims, null, authorizationService, null, null, null);
     }
 
     @GetMapping("/mine")
@@ -74,6 +89,68 @@ public class ClaimController {
         claim.setStatus("cancelled");
         claim.setUpdatedDate(Instant.now().toString());
         return claims.save(claim);
+    }
+
+    /**
+     * Claimant confirms they have physically received the item back. This is the
+     * student-side completion trigger: it marks the approved claim "completed",
+     * archives the found item, advances the recovery case, and (because the claim
+     * is now approved AND completed) cascade-deletes the item and everything that
+     * references it. Idempotent: a claim already confirmed is returned unchanged.
+     */
+    @PostMapping("/{id}/confirm-receipt")
+    public Claim confirmReceipt(@PathVariable String id, @RequestHeader(value = "X-Demo-User-Email", required = false) String userEmail) {
+        String verifiedEmail = authorizationService.resolveEmail(userEmail);
+        if (verifiedEmail == null || verifiedEmail.isBlank()) {
+            throw new ForbiddenException("Sign in is required.");
+        }
+        Claim claim = claims.findById(id).orElseThrow(() -> new NotFoundException("Claim not found"));
+        if (!verifiedEmail.equalsIgnoreCase(claim.getClaimantEmail())) {
+            throw new ForbiddenException("You can only confirm your own claim.");
+        }
+        String status = claim.getStatus() == null ? "" : claim.getStatus().trim().toLowerCase();
+        boolean alreadyConfirmed = "completed".equals(status)
+                || (claim.getReceivedConfirmedAt() != null && !claim.getReceivedConfirmedAt().isBlank());
+        if (alreadyConfirmed) {
+            return claim;
+        }
+        if (!"approved".equals(status)) {
+            throw new BadRequestException("Only an approved claim can be confirmed as received.");
+        }
+
+        String now = Instant.now().toString();
+        claim.setStatus("completed");
+        claim.setReceivedConfirmedAt(now);
+        claim.setUpdatedDate(now);
+        Claim saved = claims.save(claim);
+
+        String foundItemId = claim.getFoundItemId();
+        if (foundItems != null && foundItemId != null && !foundItemId.isBlank()) {
+            foundItems.findById(foundItemId).ifPresent(item -> {
+                item.setStatus(ItemStatus.ARCHIVED);
+                item.setClaimConfirmed(true);
+                item.setClaimConfirmedAt(now);
+                item.setUpdatedDate(now);
+                foundItems.save(item);
+            });
+        }
+        if (recoveryCaseService != null) {
+            try {
+                recoveryCaseService.markReturned(claim.getId(), foundItemId);
+            } catch (RuntimeException ignored) {
+                // Recovery-case advancement is best-effort; never block the confirmation.
+            }
+        }
+        // Approved + completed: the item's lifecycle is finished — purge it and
+        // every record that references it so nothing orphaned remains.
+        if (completionCleanup != null) {
+            try {
+                completionCleanup.purgeCompletedItem(foundItemId);
+            } catch (RuntimeException ignored) {
+                // Best-effort cleanup; the claim is already confirmed completed.
+            }
+        }
+        return saved;
     }
 
     @GetMapping("/{id}")

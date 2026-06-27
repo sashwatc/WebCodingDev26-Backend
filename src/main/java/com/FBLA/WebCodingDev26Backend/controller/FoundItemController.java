@@ -65,7 +65,7 @@ public class FoundItemController {
 
     @GetMapping("/{id}")
     public PublicFoundItemResponse get(@PathVariable String id) {
-        return service.getPublic(id);
+        return service.getPublicDetail(id);
     }
 
     @GetMapping("/{id}/share-link")

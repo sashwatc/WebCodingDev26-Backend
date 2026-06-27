@@ -233,6 +233,28 @@ public class RecoveryCaseService {
                 });
     }
 
+    /**
+     * An admin linked a confirmed found item to this lost report. Point the case
+     * at that found item and advance it to "match identified" so the return
+     * process is underway. Idempotent; never downgrades a case already further
+     * along (claim review / pickup / returned).
+     */
+    public RecoveryCase onMatchLinked(LostReport report, String foundItemId) {
+        if (report == null || isBlank(report.getId()) || isBlank(foundItemId)) {
+            return null;
+        }
+        RecoveryCase recoveryCase = ensureForLostReport(report);
+        String previousStatus = recoveryCase.getStatus();
+        recoveryCase.setSelectedFoundItemId(foundItemId);
+        if (Set.of("open", "match_identified").contains(normalize(recoveryCase.getStatus()))) {
+            recoveryCase.setStatus("match_identified");
+        }
+        recoveryCase.setUpdatedDate(clock.now());
+        RecoveryCase saved = cases.save(recoveryCase);
+        notifyCaseStatusChanged(saved, previousStatus);
+        return saved;
+    }
+
     public void markPickupReady(String claimId, String foundItemId) {
         updateCaseByClaimOrItem(claimId, foundItemId, "pickup_ready");
     }

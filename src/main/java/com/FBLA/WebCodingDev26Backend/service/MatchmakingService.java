@@ -125,6 +125,28 @@ public class MatchmakingService {
                 item.setUpdatedDate(clock.now());
                 foundItems.save(item);
             });
+            // Linking starts the return flow: take the report out of the active
+            // admin queue (as "in review"), notify the owner a match was found, and
+            // start/advance the recovery case. It is NOT recovered yet — the report
+            // only becomes "resolved" once the item is actually picked up/completed.
+            report.setStatus("in_review");
+            report.setUpdatedDate(clock.now());
+            LostReport savedReport = lostReports.save(report);
+            if (recoveryPulse != null) {
+                try {
+                    recoveryPulse.strongMatchAvailable(savedReport, Map.of("found_item_id", foundItemId));
+                } catch (RuntimeException exception) {
+                    LOGGER.warn("Unable to notify owner of linked match for lost report {}: {}", lostReportId, exception.getMessage());
+                }
+            }
+            if (recoveryCaseService != null) {
+                try {
+                    recoveryCaseService.onMatchLinked(savedReport, foundItemId);
+                } catch (RuntimeException exception) {
+                    LOGGER.warn("Unable to advance recovery case for linked match on lost report {}: {}", lostReportId, exception.getMessage());
+                }
+            }
+            return savedReport;
         }
         report.setUpdatedDate(clock.now());
         return lostReports.save(report);

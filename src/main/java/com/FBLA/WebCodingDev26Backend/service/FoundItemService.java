@@ -118,6 +118,9 @@ public class FoundItemService {
 
         List<PublicFoundItemResponse> filtered = all.stream()
                 .filter(item -> !Boolean.TRUE.equals(item.getRestrictedVisibility()))
+                // "I found this" items belong to a specific lost report's owner and are
+                // surfaced as a suggested match there — keep them out of public browse.
+                .filter(item -> item.getLinkedLostReportId() == null || item.getLinkedLostReportId().isBlank())
                 .filter(item -> {
                     if ("all".equalsIgnoreCase(effectiveStatus)) return true;
                     if ("public".equals(effectiveStatus)) return ItemStatus.isPubliclyVisible(item.getStatus());
@@ -172,6 +175,21 @@ public class FoundItemService {
     public PublicFoundItemResponse getPublic(String id) {
         FoundItem item = repository.findById(id).orElseThrow(() -> new NotFoundException("Found item not found"));
         if (!isPubliclyVisible(item)) {
+            throw new NotFoundException("Found item not found");
+        }
+        return PublicFoundItemResponse.from(item);
+    }
+
+    /**
+     * Detail-by-id lookup. More permissive than search/list: a claimant whose
+     * claim has been approved (item now VERIFIED) or completed (ARCHIVED) must
+     * still be able to open the item's public-safe detail page from "View item".
+     * Restricted (asset-protected) items remain hidden. Returns a redacted
+     * PublicFoundItemResponse, so no private fields are exposed.
+     */
+    public PublicFoundItemResponse getPublicDetail(String id) {
+        FoundItem item = repository.findById(id).orElseThrow(() -> new NotFoundException("Found item not found"));
+        if (Boolean.TRUE.equals(item.getRestrictedVisibility())) {
             throw new NotFoundException("Found item not found");
         }
         return PublicFoundItemResponse.from(item);
