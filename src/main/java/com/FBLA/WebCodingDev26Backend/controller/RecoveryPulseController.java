@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import com.FBLA.WebCodingDev26Backend.exception.NotFoundException;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -119,6 +120,24 @@ public class RecoveryPulseController {
         notification.setIsRead(true);
         notification.setUpdatedDate(clock.now());
         return notifications.save(notification);
+    }
+
+    @DeleteMapping("/notifications/{id}")
+    public Map<String, Object> dismissNotification(
+            @PathVariable String id,
+            @RequestHeader(value = "X-Demo-User-Email", required = false) String emailHeader
+    ) {
+        String email = normalize(authorization.resolveEmail(emailHeader));
+        if (email.isBlank()) {
+            throw new ForbiddenException("Signed-in user is required.");
+        }
+        Notification notification = notifications.findById(id)
+                .orElseThrow(() -> new NotFoundException("Notification not found"));
+        if (!email.equals(normalize(notification.getUserEmail())) && !authorization.isStaffOrAdmin(emailHeader)) {
+            throw new ForbiddenException("Access denied.");
+        }
+        notifications.deleteById(id);
+        return Map.of("id", id, "dismissed", true);
     }
 
     @GetMapping("/notifications")
