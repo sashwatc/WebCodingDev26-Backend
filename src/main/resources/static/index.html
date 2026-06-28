@@ -1,22 +1,47 @@
+<!--
+  index.html - the single HTML shell for the Lost Then Found app.
+
+  This is a client-rendered single-page app (SPA): the page ships an empty
+  header/main/footer skeleton, and app.js fills them in and swaps "pages" via
+  the History API. Spring Boot serves this file for app routes, and serves
+  /appwrite-config.js (loaded below) with the public Appwrite config.
+-->
 <!doctype html>
 <html lang="en">
+  <!-- Document head: character set, mobile viewport, theming, SEO description,
+       title, icons/manifest, the stylesheet, and the app's script includes. -->
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- Browser UI theme color (matches the primary teal in styles.css). -->
     <meta name="theme-color" content="oklch(0.650 0.100 200)">
+    <!-- SEO/social description of the platform. -->
     <meta name="description" content="Lost Then Found is a secure school lost-and-found recovery platform for student reports, matches, claims, and admin verification.">
     <title>Lost Then Found</title>
+    <!-- Favicon and PWA manifest. -->
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="manifest" href="/manifest.json">
+    <!-- Global stylesheet for the whole app. -->
     <link rel="stylesheet" href="/styles.css">
+    <!-- Server-generated script that sets window.__APPWRITE_CONFIG__; MUST load
+         before app.js so the Appwrite client can read its config. -->
     <script src="/appwrite-config.js"></script>
+    <!-- Main SPA entry point (ES module); renders header/main/footer and routing. -->
     <script type="module" src="/app.js"></script>
   </head>
   <body>
+    <!-- Accessibility: keyboard "skip to content" link that jumps to <main>. -->
     <a class="skip-link" href="#app">Skip to main content</a>
+    <!-- App shell. The three regions are intentionally empty; app.js injects the
+         navbar into #site-header, the active page into #app, and the footer into
+         #site-footer, re-rendering them as the user navigates. -->
     <div id="shell" class="shell">
+      <!-- Sticky navigation bar (rendered by Navbar() in app.js). -->
       <header id="site-header"></header>
+      <!-- Main content region; aria-live announces page swaps to screen readers,
+           tabindex="-1" lets the skip link / router move focus here. -->
       <main id="app" tabindex="-1" aria-live="polite"></main>
+      <!-- Site footer (rendered by Footer() in app.js). -->
       <footer id="site-footer"></footer>
     </div>
   </body>

@@ -13,6 +13,15 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 public class RecoveryMeshController {
 
+    /**
+     * GET {@code /api/partner-relays} — stubbed list of partner relays.
+     *
+     * <p>Public, no authorization. The demo backend does not persist partner relays, so this
+     * always returns an empty list (200 OK) rather than 404, keeping the recovery dashboard's
+     * empty-state rendering and the network log clean.
+     *
+     * @return 200 OK with an empty list.
+     */
     @GetMapping("/api/partner-relays")
     public List<Object> partnerRelays() {
         return List.of();

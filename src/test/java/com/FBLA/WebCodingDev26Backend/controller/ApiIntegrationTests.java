@@ -63,29 +63,53 @@ import org.springframework.web.filter.CorsFilter;
 import tools.jackson.databind.PropertyNamingStrategies;
 import tools.jackson.databind.json.JsonMapper;
 
+/**
+ * Web-layer integration tests for the REST API controllers.
+ *
+ * <p>Uses MockMvc in standalone setup, wiring every controller against Mockito-mocked services so
+ * no Spring context or database is required. The setup mirrors production HTTP behavior:
+ * snake_case JSON via a custom Jackson converter, the real {@link GlobalExceptionHandler} for error
+ * status mapping, and a CORS filter restricted to the local frontend origins. The tests exercise
+ * routing, request/response (de)serialization, authorization gating on admin/claim routes, and the
+ * happy-path CRUD contracts for items, generic entities, claims, AI assistance, matchmaking, auth,
+ * and uploads.</p>
+ */
 @ExtendWith(MockitoExtension.class)
 class ApiIntegrationTests {
+    // Mocked health service backing GET /api/health.
     @Mock
     private HealthService healthService;
+    // Mocked found-item service backing the public item routes.
     @Mock
     private FoundItemService foundItemService;
+    // Mocked generic-entity service backing /api/entities/{type} CRUD.
     @Mock
     private GenericEntityService genericEntityService;
+    // Mocked auth service backing sign-in and user lookup.
     @Mock
     private AuthService authService;
+    // Mocked upload service backing POST /api/uploads.
     @Mock
     private UploadService uploadService;
+    // Mocked matchmaking service backing the match routes.
     @Mock
     private MatchmakingService matchmakingService;
+    // Mocked authorization service; stubbed to grant/deny admin/staff and resolve caller identity.
     @Mock
     private DemoAuthorizationService authorizationService;
+    // Mocked claim repository backing the /api/claims routes.
     @Mock
     private ClaimRepository claimRepository;
+    // Mocked AI assistance service backing the /api/ai-assistance routes.
     @Mock
     private AiAssistanceService aiAssistanceService;
 
+    // System under test: the assembled MockMvc instance covering all controllers.
     private MockMvc mockMvc;
 
+    // Build the standalone MockMvc before each test: register every controller with its mocked
+    // service, attach the global exception handler, configure UTF-8 string + snake_case JSON
+    // converters, and add the CORS filter so cross-origin and error-mapping behavior is realistic.
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders
@@ -109,6 +133,12 @@ class ApiIntegrationTests {
                 .build();
     }
 
+    /**
+     * Scenario: GET /api/health returns the Mongo health snapshot.
+     * Arrange: stub healthService.health() to a connected "ok"/"mongodb" response.
+     * Act/Assert: GET returns 200 with status=ok, database=mongodb, connected=true. Passing proves
+     * the health route serializes the health response correctly.
+     */
     @Test
     void healthRouteReturnsMongoStatus() throws Exception {
         when(healthService.health()).thenReturn(new HealthResponse("ok", "mongodb", true));
@@ -120,12 +150,23 @@ class ApiIntegrationTests {
                 .andExpect(jsonPath("$.connected").value(true));
     }
 
+    /**
+     * Scenario: an unmapped route is requested.
+     * Act/Assert: GET /api/not-a-real-route returns 404. Passing proves unknown paths resolve to a
+     * not-found response rather than an error or a stray handler.
+     */
     @Test
     void missingRouteReturnsNotFound() throws Exception {
         mockMvc.perform(get("/api/not-a-real-route"))
                 .andExpect(status().isNotFound());
     }
 
+    /**
+     * Scenario: CORS preflight requests from the two allowed local frontend origins.
+     * Act/Assert: OPTIONS /api/health with Origin 5173 and again with 4173 each return 200 and echo
+     * back the matching Access-Control-Allow-Origin header. Passing proves the CORS filter permits
+     * exactly the configured dev/preview frontends.
+     */
     @Test
     void corsAllowsLocalFrontendOrigins() throws Exception {
         mockMvc.perform(options("/api/health")
@@ -141,6 +182,14 @@ class ApiIntegrationTests {
                 .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:4173"));
     }
 
+    /**
+     * Scenario: the list endpoints expose seed data for each entity type.
+     * Arrange: stub the found-item filtered list and the generic list() for LostReport/Claim/
+     * Notification/AuditLog, plus admin authorization for the Claim list which is admin-gated.
+     * Act/Assert: GET each list route and assert the seeded record id is present in the JSON array
+     * (the Claim list carries the admin demo header). Passing proves each entity type is reachable
+     * and serialized through its public list route.
+     */
     @Test
     void seedDataShapeIsAvailableThroughApiLists() throws Exception {
         List<PublicFoundItemResponse> seedItems = List.of(publicItem("found_001"), publicItem("found_002"));
@@ -176,6 +225,15 @@ class ApiIntegrationTests {
                 .andExpect(jsonPath("$[?(@.id == 'audit_001')]").exists());
     }
 
+    /**
+     * Scenario: the full create/list/patch/delete lifecycle for a found item over HTTP.
+     * Arrange: prepare service stubs returning a created item, an "approved" patched item, then a
+     * rated item (two sequential update returns), a list result, and a delete result.
+     * Act/Assert: GET list returns >=2 items; POST creates (201) echoing id + snake_case
+     * location_found; first PATCH sets status approved and round-trips photo_urls/tags; second PATCH
+     * upserts a rating and returns it; DELETE returns success=true. Passing proves the item routes
+     * correctly bind snake_case JSON and map service results through every verb.
+     */
     @Test
     void itemRoutesCreatePatchListAndDelete() throws Exception {
         FoundItem testItem = foundItem("found_test");
@@ -199,6 +257,7 @@ class ApiIntegrationTests {
         when(foundItemService.listFiltered(any(), any(), any(), any(), any(), any(), any(), any(), anyInt(), anyInt()))
                 .thenReturn(Map.of("items", itemList, "total", 2, "page", 0, "size", 20));
         when(foundItemService.create(any(), anyBoolean())).thenReturn(testItem);
+        // Two sequential PATCH calls: first returns the approved item, second returns the rated item.
         when(foundItemService.update(eq("found_test"), any(), anyBoolean()))
                 .thenReturn(approvedItem)
                 .thenReturn(ratedItem);
@@ -253,10 +312,18 @@ class ApiIntegrationTests {
                 .andExpect(jsonPath("$.success").value(true));
     }
 
+    /**
+     * Scenario: the admin moderation listing returns full records including non-public fields.
+     * Arrange: an item with an internal storage_location; stub staff/admin authorization for the
+     * admin email, and the admin listing to return it.
+     * Act/Assert: GET /api/admin/items with the admin demo header returns 200 and exposes the
+     * internal storage_location field. Passing proves staff/admin see the full moderation view that
+     * public routes omit.
+     */
     @Test
     void adminItemRouteReturnsFullModerationRecords() throws Exception {
         FoundItem adminItem = foundItem("found_admin");
-        adminItem.setStorageLocation("Main Office shelf A");
+        adminItem.setStorageLocation("Main Office shelf A"); // internal-only field
 
         when(authorizationService.requireStaffOrAdmin("avery.patel@pleasantvalley.edu"))
                 .thenReturn(user("user_admin", "Avery Patel", "avery.patel@pleasantvalley.edu", "admin"));
@@ -269,6 +336,13 @@ class ApiIntegrationTests {
                 .andExpect(jsonPath("$[0].storage_location").value("Main Office shelf A"));
     }
 
+    /**
+     * Scenario: the generic /api/entities/{type} CRUD contract holds for every supported entity.
+     * Act/Assert: drive create/list/patch/delete through the shared {@link #assertGenericEntityCrud}
+     * helper for LostReport, Claim, Notification, and AuditLog, each with a representative patch and
+     * the field expected to change. Passing proves the generic entity controller handles all
+     * configured types uniformly (Claim additionally exercising the admin gate).
+     */
     @Test
     void genericEntityRoutesWorkForEverySupportedEntity() throws Exception {
         assertGenericEntityCrud("LostReport", "lost_test", lostReport("lost_test"), "{\"status\":\"matched\"}", "$.status", "matched");
@@ -277,6 +351,13 @@ class ApiIntegrationTests {
         assertGenericEntityCrud("AuditLog", "audit_test", auditLog("audit_test"), "{\"details\":\"Updated by test\"}", "$.details", "Updated by test");
     }
 
+    /**
+     * Scenario: reading Claims and applying a privileged status patch both require admin.
+     * Arrange: stub requireAdmin(null) (no caller identity) to throw ForbiddenException.
+     * Act/Assert: GET /api/entities/Claim returns 403, and PATCH setting status=completed returns
+     * 403. Passing proves the Claim entity is locked behind admin authorization for both read and
+     * privileged writes.
+     */
     @Test
     void genericClaimReadAndPrivilegedPatchRequireAdmin() throws Exception {
         when(authorizationService.requireAdmin(null))
@@ -291,6 +372,13 @@ class ApiIntegrationTests {
                 .andExpect(status().isForbidden());
     }
 
+    /**
+     * Scenario: a claimant submitting their own pickup review/rating is NOT an admin-only action.
+     * Arrange: stub the update to return a claim with review_status=pending.
+     * Act/Assert: PATCH /api/entities/Claim/{id} with claimant rating/review/review_status=pending
+     * (no admin header) returns 200 with review_status=pending. Passing proves claimant feedback
+     * fields are an allowed non-privileged write even though other Claim patches require admin.
+     */
     @Test
     void claimantPendingReviewFeedbackDoesNotRequireAdmin() throws Exception {
         Claim reviewed = claim("claim_review");
@@ -304,12 +392,20 @@ class ApiIntegrationTests {
                 .andExpect(jsonPath("$.review_status").value("pending"));
     }
 
+    /**
+     * Scenario: GET /api/claims/mine returns only the calling user's own claims.
+     * Arrange: stub the authorization service to resolve the demo header to the caller's email, and
+     * the repository to return that user's claim for that email.
+     * Act/Assert: GET with the user's demo header returns 200 and the claim with the matching
+     * claimant_email. Passing proves "mine" scopes results to the resolved caller, not arbitrary
+     * input.
+     */
     @Test
     void claimMineReturnsOnlyResolvedUserClaims() throws Exception {
         Claim ownClaim = claim("claim_own");
         ownClaim.setClaimantEmail("jordan.kim@pleasantvalley.edu");
         when(authorizationService.resolveEmail("jordan.kim@pleasantvalley.edu"))
-                .thenReturn("jordan.kim@pleasantvalley.edu");
+                .thenReturn("jordan.kim@pleasantvalley.edu"); // caller identity resolved from header
         when(claimRepository.findByClaimantEmail("jordan.kim@pleasantvalley.edu"))
                 .thenReturn(List.of(ownClaim));
 
@@ -320,6 +416,13 @@ class ApiIntegrationTests {
                 .andExpect(jsonPath("$[0].claimant_email").value("jordan.kim@pleasantvalley.edu"));
     }
 
+    /**
+     * Scenario: the AI assistance routes return editable, source-tagged suggestions.
+     * Arrange: stub parseSearchQuery and suggestFoundItemFields to deterministic, editable results.
+     * Act/Assert: POST /api/ai-assistance/search returns editable=true, source=deterministic; POST
+     * /api/ai-assistance/found-item returns the suggested tags. Passing proves both AI helper routes
+     * accept their payloads and serialize the suggestion maps.
+     */
     @Test
     void aiAssistanceRoutesReturnEditableSuggestions() throws Exception {
         when(aiAssistanceService.parseSearchQuery(any())).thenReturn(Map.of(
@@ -347,6 +450,15 @@ class ApiIntegrationTests {
                 .andExpect(jsonPath("$.tags[0]").value("airpods"));
     }
 
+    /**
+     * Scenario: the match routes fetch existing suggestions and trigger refreshes.
+     * Arrange: stub get/refresh for a lost report and refresh for a found item to all return the
+     * same suggestion fixture.
+     * Act/Assert: GET matches for lost_001 returns the suggestion (found_item_id, confidence 96,
+     * source ai); POST refresh for the lost report returns it with the expected title; POST refresh
+     * for found_002 returns it with the expected first reason. Passing proves the three matchmaking
+     * routes map service results to snake_case JSON.
+     */
     @Test
     void matchmakingRoutesFetchAndRefreshSuggestions() throws Exception {
         MatchSuggestion suggestion = matchSuggestion();
@@ -370,12 +482,25 @@ class ApiIntegrationTests {
                 .andExpect(jsonPath("$[0].reasons[0]").value("brand match"));
     }
 
+    /**
+     * Scenario: the auth routes cover sign-in upsert, self lookup, cross-user lookup denial, admin
+     * sign-in, and missing-user lookup.
+     * Arrange: stub signIn to return student, then updated student, then admin across three calls;
+     * stub findByEmail for the known and missing emails; stub resolveEmail so a caller may look up
+     * only their own account.
+     * Act/Assert: first sign-in normalizes the upper-cased email to lower-case and returns role
+     * student; second sign-in updates the display name; GET own user returns the updated name; GET
+     * another user's account (as a non-staff caller) returns 403; admin sign-in returns role admin;
+     * GET a missing user returns 200 with literal body "null". Passing proves sign-in normalization,
+     * self-service lookup, and the cross-user authorization boundary.
+     */
     @Test
     void authRoutesUpsertAndFetchUser() throws Exception {
         AppUser student = user("user_riley", "Riley Chen", "riley.chen@pleasantvalley.edu", "student");
         AppUser updatedStudent = user("user_riley", "Riley C.", "riley.chen@pleasantvalley.edu", "student");
         AppUser admin = user("user_admin", "Avery Patel", "avery.patel@pleasantvalley.edu", "admin");
 
+        // Three successive signIn calls return student, then the renamed student, then the admin.
         when(authService.signIn(any(SignInRequest.class))).thenReturn(student, updatedStudent, admin);
         when(authService.findByEmail("riley.chen@pleasantvalley.edu")).thenReturn(Optional.of(updatedStudent));
         when(authService.findByEmail("missing@pleasantvalley.edu")).thenReturn(Optional.empty());
@@ -421,6 +546,12 @@ class ApiIntegrationTests {
                 .andExpect(content().string("null"));
     }
 
+    /**
+     * Scenario: POST /api/uploads returns the stored file as a data URL.
+     * Arrange: stub the upload service to return a base64 data URL.
+     * Act/Assert: POST with file metadata + data URL returns 201 and file_url equal to the data URL.
+     * Passing proves the upload route binds the request and serializes the upload response.
+     */
     @Test
     void uploadRouteReturnsDataUrl() throws Exception {
         when(uploadService.upload(any(UploadRequest.class))).thenReturn(new UploadResponse("data:text/plain;base64,dGVzdA=="));
@@ -432,9 +563,13 @@ class ApiIntegrationTests {
                 .andExpect(jsonPath("$.file_url").value("data:text/plain;base64,dGVzdA=="));
     }
 
+    // Helper: drive a full create -> list -> patch -> delete cycle for one generic entity type and
+    // assert each step. For the admin-gated Claim type it stubs admin authorization and attaches the
+    // admin demo header to the read/patch/delete requests. Verifies create returns 201 with the id,
+    // list returns a non-empty array, patch flips the targeted field, and delete returns success.
     private void assertGenericEntityCrud(String entityName, String id, Object entity, String patchBody, String patchedField, Object patchedValue) throws Exception {
         Object patched = patchedEntity(entity);
-        boolean isClaim = "Claim".equals(entityName);
+        boolean isClaim = "Claim".equals(entityName); // Claim routes are admin-gated
         if (isClaim) {
             when(authorizationService.requireAdmin("avery.patel@pleasantvalley.edu"))
                     .thenReturn(user("user_admin", "Avery Patel", "avery.patel@pleasantvalley.edu", "admin"));
@@ -465,6 +600,8 @@ class ApiIntegrationTests {
                 .andExpect(jsonPath("$.success").value(true));
     }
 
+    // Helper: attach the admin demo header to a request only when the entity under test is the
+    // admin-gated Claim type; otherwise pass the request through unchanged.
     private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder withAdminIfClaim(
             org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder request,
             boolean isClaim
@@ -472,6 +609,8 @@ class ApiIntegrationTests {
         return isClaim ? request.header("X-Demo-User-Email", "avery.patel@pleasantvalley.edu") : request;
     }
 
+    // Helper: produce the expected post-patch entity by mutating the field the patch targets, so the
+    // update stub can return a result reflecting the patch for each entity type.
     private Object patchedEntity(Object entity) {
         if (entity instanceof LostReport lostReport) {
             lostReport.setStatus("matched");
@@ -492,6 +631,8 @@ class ApiIntegrationTests {
         return entity;
     }
 
+    // Helper: build the CORS filter restricting the API to the two local frontend origins and the
+    // verbs the app uses, mirroring production CORS configuration.
     private CorsFilter corsFilter() {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(List.of("http://localhost:5173", "http://localhost:4173"));
@@ -502,6 +643,8 @@ class ApiIntegrationTests {
         return new CorsFilter(source);
     }
 
+    // Helper: build a snake_case JSON converter so request/response bodies match the API's
+    // production naming strategy.
     private JacksonJsonHttpMessageConverter jsonConverter() {
         JsonMapper mapper = JsonMapper.builder()
                 .propertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE)
@@ -509,6 +652,7 @@ class ApiIntegrationTests {
         return new JacksonJsonHttpMessageConverter(mapper);
     }
 
+    // Helper: build an approved found-item fixture with the given id.
     private FoundItem foundItem(String id) {
         FoundItem item = new FoundItem();
         item.setId(id);
@@ -524,10 +668,12 @@ class ApiIntegrationTests {
         return item;
     }
 
+    // Helper: build the public-facing DTO projection of a found item.
     private PublicFoundItemResponse publicItem(String id) {
         return PublicFoundItemResponse.from(foundItem(id));
     }
 
+    // Helper: build a lost-report fixture with the given id.
     private LostReport lostReport(String id) {
         LostReport report = new LostReport();
         report.setId(id);
@@ -540,6 +686,7 @@ class ApiIntegrationTests {
         return report;
     }
 
+    // Helper: build a high-confidence AI match suggestion fixture for the backpack.
     private MatchSuggestion matchSuggestion() {
         MatchSuggestion suggestion = new MatchSuggestion();
         suggestion.setFoundItemId("found_002");
@@ -551,6 +698,7 @@ class ApiIntegrationTests {
         return suggestion;
     }
 
+    // Helper: build a pending_review claim fixture with the given id.
     private Claim claim(String id) {
         Claim claim = new Claim();
         claim.setId(id);
@@ -562,6 +710,7 @@ class ApiIntegrationTests {
         return claim;
     }
 
+    // Helper: build an unread notification fixture with the given id.
     private Notification notification(String id) {
         Notification notification = new Notification();
         notification.setId(id);
@@ -573,6 +722,7 @@ class ApiIntegrationTests {
         return notification;
     }
 
+    // Helper: build an audit-log fixture with the given id.
     private AuditLog auditLog(String id) {
         AuditLog auditLog = new AuditLog();
         auditLog.setId(id);
@@ -583,6 +733,7 @@ class ApiIntegrationTests {
         return auditLog;
     }
 
+    // Helper: build an AppUser fixture with the given id, name, email, and role.
     private AppUser user(String id, String fullName, String email, String role) {
         AppUser user = new AppUser();
         user.setId(id);

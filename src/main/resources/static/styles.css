@@ -1,3 +1,17 @@
+/*
+ * styles.css - the single global stylesheet for the Lost Then Found SPA.
+ *
+ * It defines the design tokens (CSS custom properties on :root), base element
+ * resets/typography, and component styles for every UI piece app.js renders:
+ * header/nav, footer, hero/home, buttons, forms, item/match cards, status
+ * badges, the chat UI, admin tables/tabs/metrics, and empty states. Colors use
+ * the OKLCH color space. Responsive breakpoints and a reduced-motion override
+ * live at the bottom. Class names here correspond to those produced by the
+ * template literals in app.js.
+ */
+
+/* Design tokens: color scheme, palette (surfaces, ink/text, accents, status
+   colors), radius, shadow, max content width, and the base font stack. */
 :root {
   color-scheme: light;
   --bg: oklch(0.985 0.004 200);
@@ -18,6 +32,9 @@
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
+/* Base resets and element defaults: border-box sizing, page background,
+   typography, form-control font inheritance, link colors, and a visible
+   keyboard focus ring for accessibility. */
 * {
   box-sizing: border-box;
 }
@@ -61,6 +78,8 @@ a:hover {
   outline-offset: 3px;
 }
 
+/* Accessibility skip link: hidden off-screen until focused, then slides into
+   view at the top-left so keyboard users can jump to main content. */
 .skip-link {
   position: fixed;
   top: 12px;
@@ -78,6 +97,8 @@ a:hover {
   transform: translateY(0);
 }
 
+/* Site header / primary navigation: sticky translucent bar containing the
+   brand mark, nav links, signed-in user label, and logout button. */
 .site-header {
   position: sticky;
   top: 0;
@@ -159,6 +180,8 @@ a:hover {
   font-size: 0.94rem;
 }
 
+/* Main content container: centered, width-capped page body between the
+   sticky header and footer. */
 .shell main {
   max-width: var(--max);
   min-height: calc(100vh - 180px);
@@ -166,6 +189,7 @@ a:hover {
   padding: 2rem 1rem 3rem;
 }
 
+/* Site footer: bordered bar with the two demo tagline spans. */
 .site-footer {
   border-top: 1px solid var(--line);
   background: var(--surface);
@@ -183,6 +207,8 @@ a:hover {
   flex-wrap: wrap;
 }
 
+/* Home hero: two-column layout pairing the marketing copy/CTAs with the
+   numbered four-step workflow panel. */
 .hero {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(300px, 0.8fr);
@@ -254,6 +280,7 @@ a:hover {
   font-weight: 800;
 }
 
+/* Horizontal group of action buttons/links (wraps on small screens). */
 .actions {
   display: flex;
   gap: 0.7rem;
@@ -261,6 +288,8 @@ a:hover {
   flex-wrap: wrap;
 }
 
+/* Buttons and button-styled links: base primary style plus .secondary,
+   .danger, and :disabled variants. */
 .button,
 button {
   min-height: 42px;
@@ -308,12 +337,14 @@ button:disabled {
   opacity: 0.55;
 }
 
+/* Page heading block (h1 + intro paragraph) used at the top of most routes. */
 .page-head {
   display: grid;
   gap: 0.35rem;
   margin-bottom: 1.2rem;
 }
 
+/* Toolbar row, e.g. the Browse search box alongside an action button. */
 .toolbar {
   display: flex;
   gap: 0.75rem;
@@ -327,6 +358,7 @@ button:disabled {
   min-width: min(100%, 320px);
 }
 
+/* Generic grid layout; .cards makes a responsive auto-fit card grid. */
 .grid {
   display: grid;
   gap: 1rem;
@@ -336,6 +368,7 @@ button:disabled {
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
 }
 
+/* Generic bordered content panel/card used throughout the app. */
 .panel {
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -348,6 +381,8 @@ button:disabled {
   margin: 0 0 0.7rem;
 }
 
+/* Found-item card (Browse/claim previews): title + status badge, description,
+   metadata pills, and an optional claim button. */
 .item-card {
   display: grid;
   min-height: 100%;
@@ -378,6 +413,7 @@ button:disabled {
   gap: 0.4rem;
 }
 
+/* Small rounded "pill" tag for item metadata (category, color, brand, etc.). */
 .meta-pill {
   border-radius: 999px;
   background: var(--surface-2);
@@ -387,6 +423,8 @@ button:disabled {
   font-weight: 650;
 }
 
+/* Status badge and its color variants (found, pending, verified, archived,
+   danger) mapped from item/claim statuses by StatusBadge() in app.js. */
 .status {
   display: inline-flex;
   min-height: 26px;
@@ -424,6 +462,7 @@ button:disabled {
   color: oklch(0.35 0.12 28);
 }
 
+/* Possible-match card shown after a lost report, with a confidence score. */
 .match-card {
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -439,6 +478,8 @@ button:disabled {
   font-weight: 850;
 }
 
+/* Form layout: two-column grid, individual fields, labels, inputs/selects/
+   textareas, placeholders, and helper hint text. */
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -486,6 +527,7 @@ textarea::placeholder {
   font-size: 0.86rem;
 }
 
+/* Inline status messages: red error, green success, and neutral notice banners. */
 .error,
 .success,
 .notice {
@@ -510,6 +552,7 @@ textarea::placeholder {
   color: var(--ink);
 }
 
+/* Amber "verify your email" banner shown to signed-in but unverified users. */
 .verify-banner {
   display: flex;
   align-items: center;
@@ -532,6 +575,8 @@ textarea::placeholder {
   color: oklch(0.27 0.075 72);
 }
 
+/* Auth pages (login/signup/verify): constrained headings, panel, form, and the
+   "switch mode" link, plus the session-loading placeholder. */
 .auth-head {
   max-width: 760px;
 }
@@ -561,6 +606,11 @@ textarea::placeholder {
   font-weight: 650;
 }
 
+/* Chat UI section: unread-count badge, overall shell/layout (student single vs
+   admin two-column), sidebar, conversation list rows, message thread, message
+   bubbles (mine vs theirs), composer form, and the empty-thread state. */
+
+/* Red circular unread-count badge (nav + conversation rows). */
 .chat-badge {
   display: inline-flex;
   min-width: 1.35rem;
@@ -617,6 +667,7 @@ textarea::placeholder {
   margin: 0;
 }
 
+/* Admin sidebar list of student conversations and each clickable row. */
 .conversation-list {
   display: grid;
   gap: 0.45rem;
@@ -664,6 +715,7 @@ textarea::placeholder {
   grid-column: 1 / -1;
 }
 
+/* Scrollable message thread container. */
 .chat-thread {
   display: grid;
   gap: 0.75rem;
@@ -672,6 +724,8 @@ textarea::placeholder {
   padding-right: 0.25rem;
 }
 
+/* Individual message bubble; .mine right-aligns/tints the viewer's own
+   messages, .theirs left-aligns the other party's. */
 .chat-message {
   display: grid;
   max-width: min(86%, 680px);
@@ -711,6 +765,7 @@ textarea::placeholder {
   font-size: 0.82rem;
 }
 
+/* Message composer form (textarea + send button) below the thread. */
 .chat-composer {
   display: grid;
   gap: 0.55rem;
@@ -731,6 +786,8 @@ textarea::placeholder {
   background: var(--surface-2);
 }
 
+/* Admin data tables: horizontally scrollable wrapper and table cell styling
+   used by the admin dashboard (claims, items, lost reports, audit, etc.). */
 .table-wrap {
   overflow-x: auto;
   border: 1px solid var(--line);
@@ -764,6 +821,8 @@ tr:last-child td {
   border-bottom: 0;
 }
 
+/* Admin dashboard tab buttons (Claims, Recovery, Items, etc.); .active marks
+   the current tab. */
 .admin-tabs {
   display: flex;
   gap: 0.35rem;
@@ -783,12 +842,14 @@ tr:last-child td {
   border-color: var(--primary-strong);
 }
 
+/* Right-aligned admin action toolbar (e.g. the recompute button). */
 .admin-toolbar {
   display: flex;
   justify-content: flex-end;
   margin: 1rem 0;
 }
 
+/* Four-up summary metric grid used inside admin tabs (e.g. Recovery Center). */
 .admin-tools {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -796,6 +857,7 @@ tr:last-child td {
   margin: 1rem 0;
 }
 
+/* Compact action-button group placed inside table cells. */
 .table-actions {
   align-items: flex-start;
   margin-top: 0;
@@ -807,6 +869,8 @@ tr:last-child td {
   font-size: 0.84rem;
 }
 
+/* Demo Scenarios tab: card grid of one-click scenario generators plus the
+   custom-scenario form. */
 .scenario-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
@@ -836,6 +900,7 @@ tr:last-child td {
   margin-top: 1rem;
 }
 
+/* Summary metric row (home + admin): four large stat tiles. */
 .metric-row {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -843,6 +908,7 @@ tr:last-child td {
   margin: 1rem 0;
 }
 
+/* Single metric tile (big number + caption). */
 .metric {
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -861,6 +927,7 @@ tr:last-child td {
   font-weight: 650;
 }
 
+/* Dashed-border placeholder shown when a list/table/thread has no content. */
 .empty-state {
   border: 1px dashed var(--line);
   border-radius: var(--radius);
@@ -868,6 +935,7 @@ tr:last-child td {
   padding: 1.2rem;
 }
 
+/* Sources/Licenses page: vertical list of cited resources. */
 .source-list {
   display: grid;
   gap: 0.75rem;
@@ -886,6 +954,8 @@ tr:last-child td {
   display: block;
 }
 
+/* Tablet breakpoint: stack the nav, collapse multi-column grids, and let the
+   chat layout/thread go full-width. */
 @media (max-width: 860px) {
   .nav-wrap {
     align-items: flex-start;
@@ -917,6 +987,8 @@ tr:last-child td {
   }
 }
 
+/* Phone breakpoint: tighter padding, single-column forms/metrics, full-width
+   buttons, and stacked action/toolbar/banner layouts. */
 @media (max-width: 620px) {
   .shell main {
     padding: 1.2rem 0.8rem 2.5rem;
@@ -974,6 +1046,8 @@ tr:last-child td {
   }
 }
 
+/* Accessibility: honor the OS "reduce motion" setting by neutralizing
+   transitions, animations, and smooth scrolling. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

@@ -1,3 +1,21 @@
+/*
+ * app.js - the main single-page application (SPA) logic for Lost Then Found.
+ *
+ * This one ES module powers the entire frontend. It implements:
+ *  - a tiny client-side router built on the History API (routes -> page funcs),
+ *  - a small global `state` object (auth user, admin tab, chat unread counts),
+ *  - page "components" that return HTML strings rendered into #app/#header/#footer,
+ *  - auth flows (login/signup/Google/verify/logout) via ./lib/appwrite.js,
+ *  - the student & admin chat UIs via ./lib/chat.js (with Appwrite Realtime),
+ *  - all calls to the Spring Boot REST API (/api/...) through the api() helper,
+ *  - the admin dashboard (claims, recovery cases, pattern alerts, items, etc.).
+ *
+ * Rendering is intentionally low-tech: functions build HTML template strings
+ * that are assigned to element.innerHTML, then event listeners are wired up.
+ * All dynamic text is passed through escapeHtml() to prevent XSS.
+ */
+
+// Auth helpers from the Appwrite wrapper module.
 import {
   confirmEmailVerification,
   friendlyAuthError,
@@ -10,6 +28,7 @@ import {
   signInWithGoogle,
   signUpWithEmail
 } from "./lib/appwrite.js";
+// Chat data-layer helpers (Appwrite Databases + Realtime) from chat.js.
 import {
   chatConfigError,
   getAdminUnreadCount,
@@ -25,10 +44,14 @@ import {
   subscribeToConversation
 } from "./lib/chat.js";
 
+// Cached references to the three shell regions defined in index.html. Page
+// functions render into `app`; the nav/footer are re-rendered on navigation.
 const app = document.querySelector("#app");
 const header = document.querySelector("#site-header");
 const footer = document.querySelector("#site-footer");
 
+// Client-side route table: pathname -> page function. render() looks the
+// current location up here (defaulting to BrowsePage for unknown paths).
 const routes = {
   "/": HomePage,
   "/report-lost": ReportLostPage,
@@ -45,6 +68,10 @@ const routes = {
   "/sources": SourcesPage
 };
 
+// Global mutable app state shared across page renders: which admin tab is open,
+// transient admin/auth notices and errors, the Appwrite auth user and the
+// synced backend user record, chat unread counters, and handles used to tear
+// down the active chat realtime subscription / debounce timer.
 const state = {
   adminTab: "claims",
   adminNotice: "",
@@ -59,6 +86,8 @@ const state = {
   chatRefreshTimer: null
 };
 
+// Escapes a value for safe interpolation into HTML template strings (prevents
+// XSS). Coerces null/undefined to "". Returns the escaped string.
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -68,6 +97,9 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+// Returns the first non-empty value among the given keys on an object. Used to
+// tolerate both snake_case and camelCase API field names (e.g. "location_found"
+// vs "locationFound"). Returns "" if none are set.
 function field(object, ...keys) {
   for (const key of keys) {
     if (object && object[key] !== undefined && object[key] !== null && object[key] !== "") {
@@ -77,6 +109,10 @@ function field(object, ...keys) {
   return "";
 }
 
+// Central fetch wrapper for the Spring Boot REST API. Adds JSON Accept/
+// Content-Type headers, parses the JSON body, and throws an Error with the
+// server's message/error on non-2xx responses. Returns the parsed payload (or
+// null for empty bodies).
 async function api(path, options = {}) {
   const headers = {
     "Accept": "application/json",
@@ -93,28 +129,37 @@ async function api(path, options = {}) {
   return payload;
 }
 
+// Builds the admin identity header (X-Demo-User-Email) the backend uses to
+// authorize admin-only endpoints in the demo. Empty object when no email.
 function adminHeaders() {
   const user = state.authUser;
   return user?.email ? { "X-Demo-User-Email": user.email } : {};
 }
 
+// Programmatic SPA navigation: pushes a new history entry and re-renders.
 function navigate(path) {
   window.history.pushState({}, "", path);
   render();
 }
 
+// The current path plus query string, used to remember where to return to.
 function currentPathWithSearch() {
   return `${window.location.pathname}${window.location.search}`;
 }
 
+// URL-encoded current location for use as a ?next= redirect param after auth.
 function authNextParam() {
   return encodeURIComponent(currentPathWithSearch());
 }
 
+// Best display name for a user: name, else email, else a generic fallback.
 function authUserName(user = state.authUser) {
   return user?.name || user?.email || "signed-in user";
 }
 
+// Loads the current session at startup/after auth: fetches the Appwrite user,
+// syncs the backend user record, and refreshes chat badges. On any failure
+// (e.g. no session) it clears auth/chat state. Always clears authLoading.
 async function loadAuthUser() {
   state.authLoading = true;
   state.authError = "";
@@ -140,6 +185,10 @@ async function loadAuthUser() {
   }
 }
 
+// Mirrors the signed-in Appwrite user into the Spring backend via
+// POST /api/auth/signin (so the server has a user record and can assign roles).
+// Stores the result in state.backendUser; on failure leaves it null so Appwrite
+// auth still works without the backend sync.
 async function syncBackendUser() {
   if (!state.authUser?.email) {
     return;
@@ -159,10 +208,14 @@ async function syncBackendUser() {
   }
 }
 
+// True when the backend marked the synced user as an admin (gates admin routes).
 function isAdminUser() {
   return state.backendUser?.role === "admin";
 }
 
+// Recomputes the nav unread badges based on role: admins see total unread
+// across all conversations; students see their own unread count. Zeroes both
+// when signed out or chat is unconfigured.
 async function refreshChatBadges() {
   if (!state.authUser || !hasChatConfig()) {
     state.studentChatUnreadCount = 0;
@@ -180,11 +233,14 @@ async function refreshChatBadges() {
   state.adminChatUnreadCount = 0;
 }
 
+// Returns an error banner HTML string when chat isn't configured, else "".
 function ChatConfigWarning() {
   const message = chatConfigError();
   return message ? `<div class="error">${escapeHtml(message)}</div>` : "";
 }
 
+// Tears down the active chat realtime subscription and any pending debounce
+// timer. Called when leaving a chat page so we don't leak WebSocket listeners.
 function cleanupChatSubscription() {
   if (state.chatUnsubscribe) {
     state.chatUnsubscribe();
@@ -196,6 +252,8 @@ function cleanupChatSubscription() {
   }
 }
 
+// Debounces realtime-triggered reloads: collapses bursts of Appwrite events
+// into a single refresh ~160ms later so rapid changes don't thrash the UI.
 function scheduleChatRefresh(callback) {
   if (state.chatRefreshTimer) {
     window.clearTimeout(state.chatRefreshTimer);
@@ -203,6 +261,8 @@ function scheduleChatRefresh(callback) {
   state.chatRefreshTimer = window.setTimeout(callback, 160);
 }
 
+// HTML for the "sign in required" card shown on protected routes to logged-out
+// users, with login/signup links that carry the current path as ?next=.
 function AuthRequiredCard() {
   return `
     <section class="page-head auth-head">
@@ -222,6 +282,8 @@ function AuthRequiredCard() {
   `;
 }
 
+// HTML for the amber "email verification needed" banner, shown only when a user
+// is signed in but unverified. Includes a resend button. Returns "" otherwise.
 function AuthWarningBanner() {
   if (!state.authUser || isEmailVerified(state.authUser)) {
     return "";
@@ -238,6 +300,9 @@ function AuthWarningBanner() {
   `;
 }
 
+// Wraps page content with the verification banner and any one-shot success/
+// error notice. Reads then clears state.authNotice/authError so the messages
+// only appear once after the action that set them. Returns the combined HTML.
 function PageFrame(content) {
   const notice = state.authNotice;
   const error = state.authError;
@@ -252,6 +317,9 @@ function PageFrame(content) {
   `;
 }
 
+// Gate that renders content only for signed-in users: shows a loading panel
+// while the session is being checked, the sign-in-required card if logged out,
+// otherwise the content built by contentRenderer(user). Returns HTML.
 function ProtectedRoute(contentRenderer) {
   if (state.authLoading) {
     return PageFrame(`<div class="panel loading-panel">Checking your session...</div>`);
@@ -264,6 +332,8 @@ function ProtectedRoute(contentRenderer) {
   return PageFrame(contentRenderer(state.authUser));
 }
 
+// Like ProtectedRoute but additionally requires the admin role; non-admins get
+// an "admin access required" message. Returns HTML.
 function AdminOnlyRoute(contentRenderer) {
   if (state.authLoading || !state.authUser) {
     return ProtectedRoute(contentRenderer);
@@ -284,6 +354,8 @@ function AdminOnlyRoute(contentRenderer) {
   return PageFrame(contentRenderer(state.authUser));
 }
 
+// Guard for async page functions that need a signed-in user: if not signed in,
+// it renders the gate into #app and returns false (caller should bail), else true.
 function requireSignedInPage() {
   if (state.authLoading || !state.authUser) {
     app.innerHTML = ProtectedRoute(() => "");
@@ -292,6 +364,7 @@ function requireSignedInPage() {
   return true;
 }
 
+// Same as requireSignedInPage but also requires admin role.
 function requireAdminPage() {
   if (state.authLoading || !state.authUser || !isAdminUser()) {
     app.innerHTML = AdminOnlyRoute(() => "");
@@ -300,12 +373,16 @@ function requireAdminPage() {
   return true;
 }
 
+// Reads a safe post-auth redirect target from ?next=, defaulting to /browse and
+// rejecting absolute/off-site URLs (must start with a single "/").
 function getNextPath(defaultPath = "/browse") {
   const params = new URLSearchParams(window.location.search);
   const next = params.get("next") || defaultPath;
   return next.startsWith("/") && !next.startsWith("//") ? next : defaultPath;
 }
 
+// Error banner HTML shown on auth pages when the public Appwrite config is
+// missing (so the disabled auth buttons are explained). Returns "" when configured.
 function AppwriteConfigWarning() {
   if (hasAppwriteConfig()) {
     return "";
@@ -318,6 +395,7 @@ function AppwriteConfigWarning() {
   `;
 }
 
+// Heading + intro paragraph for auth pages; `mode` is "signup" or "login".
 function AuthFormIntro(mode) {
   const isSignup = mode === "signup";
   return `
@@ -330,6 +408,9 @@ function AuthFormIntro(mode) {
   `;
 }
 
+// Route: /login. Renders an "already signed in" view if a session exists,
+// otherwise the email/password + Google sign-in form, then wires up submit and
+// the Google button.
 async function LoginPage() {
   const params = new URLSearchParams(window.location.search);
   if (state.authUser) {
@@ -369,10 +450,13 @@ async function LoginPage() {
     </section>
   `);
 
+  // Wire form submission and the Google OAuth button.
   document.querySelector("#login-form").addEventListener("submit", submitLogin);
   document.querySelector("[data-google-login]").addEventListener("click", startGoogleLogin);
 }
 
+// Route: /signup. Shows "already signed in" if a session exists, else the
+// account-creation form (name/email/password/confirm) plus Google sign-up.
 async function SignupPage() {
   if (state.authUser) {
     app.innerHTML = PageFrame(`
@@ -415,10 +499,13 @@ async function SignupPage() {
     </section>
   `);
 
+  // Wire form submission and the Google OAuth button.
   document.querySelector("#signup-form").addEventListener("submit", submitSignup);
   document.querySelector("[data-google-login]").addEventListener("click", startGoogleLogin);
 }
 
+// Route: /auth/callback. Landing page after Google OAuth returns. Re-loads the
+// session; on success redirects to ?next, otherwise shows a failure message.
 async function AuthCallbackPage() {
   const next = getNextPath();
   app.innerHTML = PageFrame(`<div class="panel loading-panel">Finishing Google sign-in...</div>`);
@@ -439,6 +526,9 @@ async function AuthCallbackPage() {
   `);
 }
 
+// Route: /verify-email. Target of the Appwrite verification link. Reads userId
+// and secret from the query string, confirms verification, refreshes the
+// session, and shows success/failure UI (with a resend option on failure).
 async function VerifyEmailPage() {
   const params = new URLSearchParams(window.location.search);
   const userId = params.get("userId");
@@ -484,6 +574,9 @@ async function VerifyEmailPage() {
   }
 }
 
+// Submit handler for the login form: signs in with email/password, syncs the
+// backend user, sets a success notice (mentioning verification if needed), and
+// navigates to ?next. Shows an inline error on failure; re-enables the button.
 async function submitLogin(event) {
   event.preventDefault();
   const result = document.querySelector("#login-result");
@@ -506,6 +599,9 @@ async function submitLogin(event) {
   }
 }
 
+// Submit handler for the signup form: validates the password confirmation,
+// creates the account (which also signs in and emails a verification link),
+// syncs the backend user, and navigates to ?next. Inline error on failure.
 async function submitSignup(event) {
   event.preventDefault();
   const result = document.querySelector("#signup-result");
@@ -533,6 +629,8 @@ async function submitSignup(event) {
   }
 }
 
+// Click handler for the Google auth buttons: shows a redirecting notice and
+// kicks off the OAuth flow (which navigates away). Surfaces config errors inline.
 function startGoogleLogin() {
   const result = document.querySelector("#login-result, #signup-result");
   if (result) {
@@ -548,11 +646,14 @@ function startGoogleLogin() {
   }
 }
 
+// Renders a small unread-count badge HTML string, or "" when count is 0.
 function chatUnreadBadge(count) {
   const value = Number(count || 0);
   return value > 0 ? `<span class="chat-badge" aria-label="${value} unread messages">${value}</span>` : "";
 }
 
+// Formats an ISO timestamp into a short, localized "Mon D, h:mm" label for chat
+// messages. Falls back to the raw (escaped) value if it isn't a valid date.
 function formatChatTime(value) {
   if (!value) {
     return "";
@@ -569,6 +670,8 @@ function formatChatTime(value) {
   }));
 }
 
+// Renders one chat message bubble. Aligns/tints it as "mine" vs "theirs" based
+// on whether senderId matches the viewer, and labels the sender role.
 function ChatMessage(message, currentUserId) {
   const isMine = message.senderId === currentUserId;
   const role = message.senderRole === "admin" ? "Admin" : "Student";
@@ -583,6 +686,7 @@ function ChatMessage(message, currentUserId) {
   `;
 }
 
+// Renders the full message thread (or an empty-state prompt when none exist).
 function ChatThread(messages, currentUserId) {
   if (!messages.length) {
     return `
@@ -599,6 +703,9 @@ function ChatThread(messages, currentUserId) {
   `;
 }
 
+// Renders a message-composer form. `formId` namespaces the form/textarea/result
+// element ids, `placeholder` is the textarea hint, and `disabled` greys it out
+// (e.g. when no conversation is selected). Returns HTML.
 function ChatComposer(formId, placeholder, disabled = false) {
   return `
     <form id="${formId}" class="chat-composer" novalidate>
@@ -612,6 +719,9 @@ function ChatComposer(formId, placeholder, disabled = false) {
   `;
 }
 
+// Route: /chat. Student-facing chat with the admin team. Requires sign-in,
+// renders a loading shell, then loads the conversation and subscribes to live
+// updates (debounced reload). Bails with a warning if chat is unconfigured.
 async function StudentChatPage() {
   if (!requireSignedInPage()) {
     return;
@@ -634,6 +744,7 @@ async function StudentChatPage() {
   }
 
   await loadStudentChat();
+  // Subscribe to live updates for this student's conversation (best-effort).
   try {
     const conversation = await getStudentConversation(state.authUser);
     state.chatUnsubscribe = await subscribeToConversation(conversation.conversationId, () => {
@@ -644,6 +755,9 @@ async function StudentChatPage() {
   }
 }
 
+// (Re)renders the student chat panel: loads/creates the conversation, lists its
+// messages, marks them read (zeroing the badge), refreshes the navbar, and
+// wires the send form. Shows an inline error on failure. No-op if region is gone.
 async function loadStudentChat() {
   const target = document.querySelector("#student-chat-region");
   if (!target) {
@@ -677,6 +791,8 @@ async function loadStudentChat() {
   }
 }
 
+// Submit handler for the student composer: validates non-empty text, sends the
+// message, resets the form, refreshes badges/navbar, and reloads the thread.
 async function submitStudentChat(event) {
   event.preventDefault();
   const form = event.currentTarget;
@@ -705,6 +821,9 @@ async function submitStudentChat(event) {
   }
 }
 
+// Renders the admin sidebar list of student conversations, highlighting the
+// active one and showing each student's name/email, unread badge, and last
+// message preview. Returns HTML (or an empty-state when there are none).
 function ConversationList(conversations, activeConversationId) {
   if (!conversations.length) {
     return `<section class="empty-state chat-empty"><p>No student conversations yet.</p></section>`;
@@ -726,6 +845,9 @@ function ConversationList(conversations, activeConversationId) {
   `;
 }
 
+// Route: /admin/chat. Admin chat dashboard. Requires admin role, renders a
+// loading shell, loads all conversations, and subscribes to live updates across
+// both chat collections (debounced reload). Bails if chat is unconfigured.
 async function AdminChatPage() {
   if (!requireAdminPage()) {
     return;
@@ -757,6 +879,10 @@ async function AdminChatPage() {
   }
 }
 
+// (Re)renders the admin chat view: lists conversations, picks the active one
+// (from ?conversation= or the first), loads and marks its messages read, sums
+// the remaining admin unread total, renders the two-column layout, and wires
+// the reply form to the active conversation. Inline error on failure.
 async function loadAdminChat() {
   const target = document.querySelector("#admin-chat-region");
   if (!target) {
@@ -815,6 +941,9 @@ async function loadAdminChat() {
   }
 }
 
+// Submit handler for an admin reply: validates non-empty text, sends the reply
+// into the given conversation, resets the form, refreshes badges/navbar, and
+// reloads the admin chat view.
 async function submitAdminChat(event, conversation) {
   event.preventDefault();
   const form = event.currentTarget;
@@ -843,6 +972,10 @@ async function submitAdminChat(event, conversation) {
   }
 }
 
+// Builds the primary navigation bar HTML. Inserts role-specific links: students
+// get a "Contact Admin" chat link, admins get Admin + Admin Chat links (each
+// with unread counts), and shows the user label + logout or a Sign In link.
+// Marks the link matching the current path as active.
 function Navbar() {
   const links = [
     ["/", "Home"],
@@ -884,6 +1017,7 @@ function Navbar() {
   `;
 }
 
+// Renders the static site footer HTML.
 function Footer() {
   return `
     <div class="footer-wrap">
@@ -893,6 +1027,9 @@ function Footer() {
   `;
 }
 
+// Normalizes a raw backend status string into a user-facing label + color tone
+// and returns the badge HTML. Maps many internal statuses (e.g. APPROVED,
+// CLAIMED, PENDING_REVIEW, RETURNED, REJECTED) onto a small display vocabulary.
 function StatusBadge(status) {
   const raw = String(status || "FOUND").toUpperCase();
   const label = raw === "APPROVED" ? "FOUND"
@@ -909,6 +1046,9 @@ function StatusBadge(status) {
   return `<span class="status ${tone}">${escapeHtml(label.replaceAll("_", " "))}</span>`;
 }
 
+// Renders a public-safe found-item card from an item record, tolerating both
+// snake/camel field names via field(). `options.hideClaim` omits the claim
+// button (used in previews). Returns HTML.
 function ItemCard(item, options = {}) {
   const id = field(item, "id");
   const title = field(item, "title", "found_item_title") || "Found item";
@@ -938,6 +1078,9 @@ function ItemCard(item, options = {}) {
   `;
 }
 
+// Renders the ownership-claim form, pre-filling the found-item id when given.
+// Collects claimant identity, reason, a private "secret" detail for staff
+// verification, and pickup availability. Returns HTML.
 function ClaimForm(itemId = "") {
   return `
     <form id="claim-form" class="panel" novalidate>
@@ -980,6 +1123,9 @@ function ClaimForm(itemId = "") {
   `;
 }
 
+// Generic data-table renderer for the admin dashboard. `columns` is an array of
+// { label, key?, render? } (render(row)->HTML overrides a plain escaped key
+// lookup); `rows` are the records; `empty` is the no-rows message. Returns HTML.
 function AdminTable({ columns, rows, empty = "No records yet." }) {
   if (!rows?.length) {
     return `<div class="empty-state"><p>${escapeHtml(empty)}</p></div>`;
@@ -1002,6 +1148,9 @@ function AdminTable({ columns, rows, empty = "No records yet." }) {
   `;
 }
 
+// Route: / (home). Renders the hero, workflow steps, a placeholder metric row,
+// and the demo path blurb, then asynchronously fills the metrics from the API
+// (falling back to static demo values if the requests fail).
 async function HomePage() {
   app.innerHTML = PageFrame(`
     <section class="hero">
@@ -1030,6 +1179,7 @@ async function HomePage() {
       <p>Use the seeded calculator and AirPods examples, then submit a lost report, claim a match, approve the claim as admin, and show the notification plus audit log.</p>
     </section>
   `);
+  // Fetch the three datasets in parallel and derive headline counts.
   try {
     const [items, claims, lostReports] = await Promise.all([
       api("/api/items"),
@@ -1052,6 +1202,7 @@ async function HomePage() {
   }
 }
 
+// Returns the description text for the home workflow step at the given index.
 function workflowText(index) {
   return [
     "Student submits category, color, location, date, and keywords.",
@@ -1061,10 +1212,13 @@ function workflowText(index) {
   ][index];
 }
 
+// Renders a single metric tile (big value + caption) HTML.
 function metric(value, label) {
   return `<div class="metric"><strong>${escapeHtml(value)}</strong><span>${escapeHtml(label)}</span></div>`;
 }
 
+// Route: /report-lost. Requires sign-in. Renders the lost-item report form
+// (defaults the date to today) and wires submission to submitLostReport.
 async function ReportLostPage() {
   if (!requireSignedInPage()) {
     return;
@@ -1100,10 +1254,13 @@ async function ReportLostPage() {
       <div id="lost-result" role="status"></div>
     </form>
   `);
+  // Default the date field to today and wire form submission.
   document.querySelector("#date_lost").valueAsDate = new Date();
   document.querySelector("#lost-form").addEventListener("submit", submitLostReport);
 }
 
+// Submit handler for the lost report: POSTs the report (the backend immediately
+// computes matches), then renders any returned possible-match cards inline.
 async function submitLostReport(event) {
   event.preventDefault();
   const result = document.querySelector("#lost-result");
@@ -1128,6 +1285,8 @@ async function submitLostReport(event) {
   }
 }
 
+// Renders a single possible-match card (title, confidence %, match reasons, and
+// a claim link) from a match result. Returns HTML.
 function MatchCard(match) {
   const id = field(match, "found_item_id", "foundItemId");
   const title = field(match, "found_item_title", "foundItemTitle") || id;
@@ -1149,6 +1308,9 @@ function MatchCard(match) {
   `;
 }
 
+// Route: /report-found. Requires sign-in. Renders the found-item form (public
+// description + a private verification clue + optional photo), defaults the date
+// to today, and wires submission to submitFoundItem.
 async function ReportFoundPage() {
   if (!requireSignedInPage()) {
     return;
@@ -1190,10 +1352,14 @@ async function ReportFoundPage() {
       <div id="found-result" role="status"></div>
     </form>
   `);
+  // Default the date field to today and wire form submission.
   document.querySelector("#date_found").valueAsDate = new Date();
   document.querySelector("#found-form").addEventListener("submit", submitFoundItem);
 }
 
+// Submit handler for a found item: optionally uploads the photo, moves the
+// verification clue into the private clues array, stamps status/record_type,
+// POSTs to /api/items, and previews the saved public card.
 async function submitFoundItem(event) {
   event.preventDefault();
   const result = document.querySelector("#found-result");
@@ -1203,10 +1369,13 @@ async function submitFoundItem(event) {
   try {
     const form = event.currentTarget;
     const payload = formPayload(form);
+    // Upload the photo (if any) and attach its URL to the payload.
     const photoInput = form.querySelector("#photo");
     if (photoInput.files.length) {
       payload.photo_urls = [await uploadPhoto(photoInput.files[0])];
     }
+    // Set server-expected fields and move the verification clue into the private
+    // (non-public) clues array so it never appears on the public card.
     payload.status = "FOUND";
     payload.record_type = "found";
     payload.private_verification_clues = [payload.verification_clue];

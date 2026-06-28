@@ -3,13 +3,34 @@ package com.FBLA.WebCodingDev26Backend.service;
 import java.util.Locale;
 import org.springframework.stereotype.Service;
 
+/**
+ * Stateless renderer that turns a {@link RecoveryPulseEvent} into a fully-populated
+ * {@link RecoveryPulseMessage} containing channel-specific copy (in-app, email, SMS, webhook).
+ *
+ * <p>It is the single source of truth for notification wording across the "Lost Then Found"
+ * (a.k.a. Recovery Pulse) system: a large switch on the event type selects the appropriate copy,
+ * interpolating short, sanitized identifiers (case id, claim id, status) from the event context.
+ * Unknown event types fall back to a generic update message. No collaborators or state.
+ */
 @Service
 public class RecoveryPulseTemplateService {
+    /**
+     * Renders the per-channel message for an event.
+     *
+     * <p>Lower-cases the event type, extracts shortened case/claim ids from the context, then
+     * branches per event type to construct the copy. The "recovery_case_status_update" branch also
+     * derives a human-friendly status string. Any unrecognized type yields a generic fallback.
+     *
+     * @param event the event to render
+     * @return the fully-populated message with text for every channel
+     */
     public RecoveryPulseMessage render(RecoveryPulseEvent event) {
+        // Normalize the event type for the switch and pull short, display-safe ids from context.
         String type = value(event.eventType()).toLowerCase(Locale.ROOT);
         String caseId = shortId(event.context().get("case_id"));
         String claimId = shortId(event.context().get("claim_id"));
 
+        // Each arm supplies (title, in-app body, email body, SMS body, webhook summary).
         return switch (type) {
             case "strong_item_match" -> message(
                     "Strong match available",
@@ -19,6 +40,7 @@ public class RecoveryPulseTemplateService {
                     "Strong match alert created."
             );
             case "recovery_case_status_update" -> {
+                // Convert the raw status (e.g. "pickup_ready") into readable text ("pickup ready").
                 String status = safeStatus(event.context().get("status"));
                 yield message(
                         "Recovery Case updated",
@@ -91,6 +113,7 @@ public class RecoveryPulseTemplateService {
                     "Lost Then Found: Pattern Review alert needs admin attention.",
                     "Pattern Review alert created."
             );
+            // Fallback for any event type without dedicated copy.
             default -> message(
                     "Lost Then Found update",
                     "A recovery update is ready in Lost Then Found.",
@@ -101,6 +124,17 @@ public class RecoveryPulseTemplateService {
         };
     }
 
+    /**
+     * Factory that assembles a {@link RecoveryPulseMessage} from the five copy variants. The title
+     * doubles as the email subject, and a truncated preview is derived from title + in-app body.
+     *
+     * @param title          headline / email subject
+     * @param inApp          in-app body
+     * @param email          email body
+     * @param sms            SMS body
+     * @param webhookSummary webhook summary line
+     * @return the populated message
+     */
     private RecoveryPulseMessage message(String title, String inApp, String email, String sms, String webhookSummary) {
         return new RecoveryPulseMessage(
                 title,
@@ -113,16 +147,28 @@ public class RecoveryPulseTemplateService {
         );
     }
 
+    /**
+     * Builds a log/store-safe preview by joining title and message with " - ", collapsing all
+     * whitespace runs to single spaces, trimming, and truncating to at most 180 characters.
+     */
     private String preview(String title, String message) {
         String preview = (value(title) + " - " + value(message)).replaceAll("\\s+", " ").trim();
         return preview.length() > 180 ? preview.substring(0, 180) : preview;
     }
 
+    /**
+     * Converts a raw status value into display text by replacing underscores with spaces and
+     * trimming, defaulting to "updated" when blank.
+     */
     private String safeStatus(Object raw) {
         String status = value(raw).replace('_', ' ').trim();
         return status.isBlank() ? "updated" : status;
     }
 
+    /**
+     * Produces a short, display-safe identifier: trims the value, returns the literal "record" when
+     * blank, and otherwise truncates to the first 12 characters.
+     */
     private String shortId(Object raw) {
         String id = value(raw).trim();
         if (id.isBlank()) {
@@ -131,6 +177,7 @@ public class RecoveryPulseTemplateService {
         return id.length() <= 12 ? id : id.substring(0, 12);
     }
 
+    /** Null-safe stringification: null becomes an empty string. */
     private String value(Object raw) {
         return raw == null ? "" : String.valueOf(raw);
     }

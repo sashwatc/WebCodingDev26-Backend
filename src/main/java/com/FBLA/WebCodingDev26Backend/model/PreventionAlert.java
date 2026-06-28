@@ -5,33 +5,69 @@ import java.util.List;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
+/**
+ * A proactive "prevention" alert raised when lost-item activity in a campus zone/category
+ * spikes above an expected baseline, prompting staff to take preventive action.
+ *
+ * <p>Persisted as a MongoDB document in the "prevention_alerts" collection (mapped via
+ * {@code @Document}). The alert compares an observed count during a recent time window
+ * against a historical baseline count over a baseline window, and bundles the lost reports,
+ * reasons and suggested actions that explain it.</p>
+ *
+ * <p>Related models: scoped to a tenant via {@code tenantId} and a location via
+ * {@code campusZoneId}; references source lost reports by id in {@code sourceLostReportIds}.</p>
+ */
 @Document(collection = "prevention_alerts")
 public class PreventionAlert {
+    /** MongoDB document primary key (auto-generated string id). */
     @Id
     private String id;
+    /** Tenant/organization this alert belongs to (multi-tenant scoping). */
     private String tenantId;
+    /** Human-readable headline summarizing the alert. */
     private String title;
+    /** Kind of alert, e.g. a spike type or detection rule that produced it. */
     private String alertType;
+    /** Severity level of the alert, e.g. "low", "medium", "high". */
     private String severity;
+    /** Id of the campus zone/location the alert pertains to. */
     private String campusZoneId;
+    /** Item category the alert concerns (e.g. electronics, water bottles). */
     private String category;
+    /** Start (ISO string) of the recent observation window being evaluated. */
     private String timeWindowStart;
+    /** End (ISO string) of the recent observation window being evaluated. */
     private String timeWindowEnd;
+    /** Start (ISO string) of the historical baseline window used for comparison. */
     private String baselineWindowStart;
+    /** End (ISO string) of the historical baseline window used for comparison. */
     private String baselineWindowEnd;
+    /** Expected/historical count of events over the baseline window. */
     private Integer baselineCount;
+    /** Actual observed count of events over the recent time window. */
     private Integer observedCount;
+    /** Ids of the lost reports that contributed to this alert; defaults to an empty list. */
     private List<String> sourceLostReportIds = new ArrayList<>();
+    /** Human-readable reasons explaining why the alert fired; defaults to an empty list. */
     private List<String> reasons = new ArrayList<>();
+    /** Recommended preventive actions for staff; defaults to an empty list. */
     private List<String> suggestedActions = new ArrayList<>();
+    /** Lifecycle status of the alert, e.g. "active", "resolved". */
     private String status;
+    /** Timestamp (ISO string) when the alert's metrics were computed. */
     private String calculatedAt;
+    /** Timestamp (ISO string) when the alert document was created. */
     private String createdDate;
+    /** Timestamp (ISO string) when the alert was resolved; null while still active. */
     private String resolvedDate;
+    /** Identifier (e.g. staff email) of who resolved the alert; null while still active. */
     private String resolvedBy;
+    /** Free-text notes describing how/why the alert was resolved. */
     private String resolutionNotes;
+    /** Flag marking this as demo/seed data rather than a real production alert. */
     private Boolean isDemo;
 
+    // --- Trivial getters/setters follow; list setters are null-safe (see below). ---
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
     public String getTenantId() { return tenantId; }
@@ -58,6 +94,8 @@ public class PreventionAlert {
     public void setBaselineCount(Integer baselineCount) { this.baselineCount = baselineCount; }
     public Integer getObservedCount() { return observedCount; }
     public void setObservedCount(Integer observedCount) { this.observedCount = observedCount; }
+    // Null-safe list setters: a null argument is coerced to an empty list so the
+    // collection fields are never null for callers/serialization.
     public List<String> getSourceLostReportIds() { return sourceLostReportIds; }
     public void setSourceLostReportIds(List<String> sourceLostReportIds) { this.sourceLostReportIds = sourceLostReportIds == null ? new ArrayList<>() : sourceLostReportIds; }
     public List<String> getReasons() { return reasons; }

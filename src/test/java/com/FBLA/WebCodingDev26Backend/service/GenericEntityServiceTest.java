@@ -22,28 +22,56 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+/**
+ * Unit tests for {@link GenericEntityService}, the generic create/update facade used by the
+ * entities API.
+ *
+ * <p>All repositories and downstream services are mocked. The tests verify that snake_case
+ * frontend payloads are correctly mapped onto the {@link LostReport}/{@link Claim} domain models
+ * (including legacy/alias field duplication and defaulting), and that updating a lost report
+ * triggers matchmaking and recovery-case maintenance without double-refreshing the recovery case.
+ * Two service factories are used: {@link #service()} wires a {@link WorkflowService}, while the
+ * update test constructs the richer constructor that includes the {@link RecoveryCaseService}.</p>
+ */
 @ExtendWith(MockitoExtension.class)
 class GenericEntityServiceTest {
+    // Mocked lost-report repository.
     @Mock
     private LostReportRepository lostReports;
+    // Mocked claim repository.
     @Mock
     private ClaimRepository claims;
+    // Mocked notification repository.
     @Mock
     private NotificationRepository notifications;
+    // Mocked audit-log repository.
     @Mock
     private AuditLogRepository auditLogs;
+    // Mocked workflow service (status side-effects) for the simple service() factory.
     @Mock
     private WorkflowService workflow;
+    // Mocked matchmaking service; verified to be refreshed on lost-report updates.
     @Mock
     private MatchmakingService matchmakingService;
+    // Mocked recovery-case service; verified for ensure/refresh behavior on lost-report updates.
     @Mock
     private RecoveryCaseService recoveryCaseService;
 
+    /**
+     * Scenario: create a LostReport from the full snake_case payload the frontend sends.
+     * Arrange: stub the repository save to echo the entity back.
+     * Act: call create("LostReport", payload) with item type, location, photo, contact, matched
+     * items, etc.
+     * Assert: each field maps to the right model property, including alias pairs (title==itemType,
+     * locationLost==lastSeenLocation, photoUrls list vs single photoUrl), a defaulted status of
+     * "open", and the nested matched_items list being preserved with its found_item_id. Passing
+     * proves the frontend lost-report shape is fully and faithfully accepted.
+     */
     @Test
     void createLostReportAcceptsFrontendPayloadShape() {
         GenericEntityService service = service();
 
-        when(lostReports.save(any(LostReport.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(lostReports.save(any(LostReport.class))).thenAnswer(invocation -> invocation.getArgument(0)); // echo saved entity
 
         LostReport report = (LostReport) service.create("LostReport", Map.ofEntries(
                 Map.entry("item_type", "AirPods Pro case"),
@@ -67,24 +95,34 @@ class GenericEntityServiceTest {
                 )))
         ));
 
-        assertThat(report.getTitle()).isEqualTo("AirPods Pro case");
+        assertThat(report.getTitle()).isEqualTo("AirPods Pro case"); // title mirrors item_type
         assertThat(report.getItemType()).isEqualTo("AirPods Pro case");
-        assertThat(report.getLocationLost()).isEqualTo("Library");
+        assertThat(report.getLocationLost()).isEqualTo("Library"); // locationLost mirrors last_seen_location
         assertThat(report.getLastSeenLocation()).isEqualTo("Library");
-        assertThat(report.getPhotoUrls()).containsExactly("data:image/png;base64,abc");
-        assertThat(report.getPhotoUrl()).isEqualTo("data:image/png;base64,abc");
+        assertThat(report.getPhotoUrls()).containsExactly("data:image/png;base64,abc"); // single photo lifted into list
+        assertThat(report.getPhotoUrl()).isEqualTo("data:image/png;base64,abc"); // legacy single-photo field also set
         assertThat(report.getExtraNotes()).isEqualTo("Lost before second period.");
         assertThat(report.getStudentId()).isEqualTo("PV10294");
-        assertThat(report.getStatus()).isEqualTo("open");
-        assertThat(report.getMatchedItems()).hasSize(1);
-        assertThat(((Map<?, ?>) report.getMatchedItems().get(0)).get("found_item_id")).isEqualTo("found_002");
+        assertThat(report.getStatus()).isEqualTo("open"); // status defaults to open on create
+        assertThat(report.getMatchedItems()).hasSize(1); // nested matches preserved
+        assertThat(((Map<?, ?>) report.getMatchedItems().get(0)).get("found_item_id")).isEqualTo("found_002"); // match content intact
     }
 
+    /**
+     * Scenario: create a Claim from the full snake_case payload the frontend sends.
+     * Arrange: stub the claim repository save to echo the entity back.
+     * Act: call create("Claim", payload) carrying reason, proof, risk fields, rating/review fields,
+     * etc.
+     * Assert: every field maps onto the Claim model, including alias pairs (claimReason==reason),
+     * the submitted status, risk score/flags, received-confirmed timestamp, and the claimant
+     * rating/review/review-status fields; the empty review_reviewed_at maps to an empty string.
+     * Passing proves the frontend claim shape is fully accepted.
+     */
     @Test
     void createClaimAcceptsFrontendPayloadShape() {
         GenericEntityService service = service();
 
-        when(claims.save(any(Claim.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(claims.save(any(Claim.class))).thenAnswer(invocation -> invocation.getArgument(0)); // echo saved entity
 
         Claim claim = (Claim) service.create("Claim", Map.ofEntries(
                 Map.entry("found_item_id", "found_003"),
@@ -126,16 +164,28 @@ class GenericEntityServiceTest {
         assertThat(claim.getReviewReviewedAt()).isEmpty();
     }
 
+    /**
+     * Scenario: patch-update an existing LostReport's title.
+     * Arrange: repository returns an existing open report; save echoes it; construct the service via
+     * the richer constructor that wires the recovery-case service.
+     * Act: call update("LostReport", id, {title}).
+     * Assert: the title is updated; recoveryCaseService.ensureForLostReport and
+     * matchmakingService.refreshMatchesForLostReport are each invoked once; but
+     * recoveryCaseService.refreshForLostReport is NEVER called. Passing proves an update maintains
+     * the recovery case exactly once and avoids a redundant double-refresh.
+     */
     @Test
     void lostReportUpdateDoesNotDoubleRefreshRecoveryCase() {
+        // Existing persisted report that the update will mutate.
         LostReport existing = new LostReport();
         existing.setId("lost_001");
         existing.setTitle("Original title");
         existing.setStatus("open");
 
-        when(lostReports.findById("lost_001")).thenReturn(Optional.of(existing));
-        when(lostReports.save(any(LostReport.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(lostReports.findById("lost_001")).thenReturn(Optional.of(existing)); // load target
+        when(lostReports.save(any(LostReport.class))).thenAnswer(invocation -> invocation.getArgument(0)); // echo saved
 
+        // Build service via the full constructor including recoveryCaseService to observe its calls.
         GenericEntityService service = new GenericEntityService(
                 lostReports,
                 claims,
@@ -151,12 +201,14 @@ class GenericEntityServiceTest {
 
         LostReport report = (LostReport) service.update("LostReport", "lost_001", Map.of("title", "Updated title"));
 
-        assertThat(report.getTitle()).isEqualTo("Updated title");
-        verify(recoveryCaseService).ensureForLostReport(existing);
-        verify(matchmakingService).refreshMatchesForLostReport("lost_001");
-        verify(recoveryCaseService, never()).refreshForLostReport(any());
+        assertThat(report.getTitle()).isEqualTo("Updated title"); // patch applied
+        verify(recoveryCaseService).ensureForLostReport(existing); // case ensured once
+        verify(matchmakingService).refreshMatchesForLostReport("lost_001"); // matches refreshed once
+        verify(recoveryCaseService, never()).refreshForLostReport(any()); // no redundant second refresh
     }
 
+    // Helper: build the service with the simple (WorkflowService-based) constructor used by the
+    // create tests.
     private GenericEntityService service() {
         return new GenericEntityService(
                 lostReports,

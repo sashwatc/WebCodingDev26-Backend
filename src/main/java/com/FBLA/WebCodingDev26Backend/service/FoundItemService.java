@@ -25,32 +25,72 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+/**
+ * Owns the lifecycle and public presentation of {@link FoundItem} records (the inventory of items
+ * turned in to lost-and-found).
+ *
+ * <p>Responsibilities:
+ * <ul>
+ *   <li>public, redacted browsing/search ({@link #list}, {@link #listFiltered}, {@link #getPublic},
+ *       {@link #getPublicDetail}) — filtering, keyword search, sorting, and pagination over only
+ *       publicly-visible, non-restricted items, returned as {@link PublicFoundItemResponse};</li>
+ *   <li>admin create/update/delete with input sanitization, staff-only field protection, validation,
+ *       id/timestamp/status defaults, and asset-registry enrichment (restricted-visibility tagging);</li>
+ *   <li>ratings upsert/removal embedded in updates;</li>
+ *   <li>soft-delete: archive instead of hard-delete when an item is referenced by claims, custody
+ *       events, recovery cases, or lost-report matches;</li>
+ *   <li>side effects: append custody-ledger events, refresh matchmaking, and fire saved-search alerts.</li>
+ * </ul>
+ *
+ * <p>Collaborators (most optional, null in lighter constructors): {@link FoundItemRepository},
+ * {@link PatchMapper}, {@link ClockService}, {@link WorkflowService}, {@link MatchmakingService},
+ * {@link AssetRegistryRecordRepository}, {@link ClaimRepository}, {@link CustodyEventRepository},
+ * {@link RecoveryCaseRepository}, {@link LostReportRepository}, {@link CustodyLedgerService},
+ * {@link InputSanitizer}, and {@link SavedSearchService}.
+ */
 @Service
 public class FoundItemService {
+    /** Logger for non-fatal side-effect failures (custody append, match refresh). */
     private static final Logger LOGGER = LoggerFactory.getLogger(FoundItemService.class);
 
+    /** Primary found-item data store. */
     private final FoundItemRepository repository;
+    /** Maps raw payloads to entities and copies present fields for partial updates. */
     private final PatchMapper mapper;
+    /** Clock abstraction for created/updated timestamps. */
     private final ClockService clock;
+    /** Workflow service used to detect references that block hard-delete (optional). */
     private final WorkflowService workflow;
+    /** Recomputes matches when an item changes (optional). */
     private final MatchmakingService matchmakingService;
+    /** Asset registry lookup for restricted/asset-tagged items (optional). */
     private final AssetRegistryRecordRepository assetRegistry;
+    /** Claim store; consulted when deciding archive-vs-delete (optional). */
     private final ClaimRepository claims;
+    /** Custody-event store; consulted when deciding archive-vs-delete (optional). */
     private final CustodyEventRepository custodyEvents;
+    /** Recovery-case store; consulted when deciding archive-vs-delete (optional). */
     private final RecoveryCaseRepository recoveryCases;
+    /** Lost-report store; consulted for match references when deciding archive-vs-delete (optional). */
     private final LostReportRepository lostReports;
+    /** Appends custody-ledger events for intake/archive (optional). */
     private final CustodyLedgerService custodyLedgerService;
+    /** Sanitizes inbound request maps before mapping to entities. */
     private final InputSanitizer sanitizer;
+    /** Saved-search alerting service; notified when a new public item is created (optional, setter-injected). */
     private SavedSearchService savedSearchService;
 
+    /** Minimal constructor (tests): repository + mapper + clock; default sanitizer, no collaborators. */
     public FoundItemService(FoundItemRepository repository, PatchMapper mapper, ClockService clock) {
         this(repository, mapper, clock, null, null, null, null, null, null, null, null, new InputSanitizer());
     }
 
+    /** Constructor variant that adds only the {@link WorkflowService}. */
     public FoundItemService(FoundItemRepository repository, PatchMapper mapper, ClockService clock, WorkflowService workflow) {
         this(repository, mapper, clock, workflow, null, null, null, null, null, null, null, new InputSanitizer());
     }
 
+    /** Constructor variant that wires matching/asset/claim/custody/recovery collaborators but no workflow. */
     public FoundItemService(
             FoundItemRepository repository,
             PatchMapper mapper,
@@ -66,6 +106,7 @@ public class FoundItemService {
         this(repository, mapper, clock, null, matchmakingService, assetRegistry, claims, custodyEvents, recoveryCases, lostReports, custodyLedgerService, new InputSanitizer());
     }
 
+    /** Primary (Spring-injected) constructor wiring every collaborator. */
     @Autowired
     public FoundItemService(
             FoundItemRepository repository,
