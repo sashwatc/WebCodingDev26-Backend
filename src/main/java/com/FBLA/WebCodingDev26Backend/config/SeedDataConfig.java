@@ -146,6 +146,12 @@ public class SeedDataConfig {
             users.save(user("user_jordan_lee", "Jordan Lee", "jordan.lee@pleasantvalley.edu", "student"));
         }
 
+        // Drop the retired Black Hydro Flask so it disappears from already-seeded
+        // databases on the next startup (it competed with the Navy Owala in searches).
+        if (foundItems != null) {
+            foundItems.deleteById("found_001");
+        }
+
         // ---- Case 042 — Avery Chen's navy Owala bottle (full recovery journey) ----
         // CLAIM_PENDING keeps the item viewable on the public detail page (VERIFIED
         // items are hidden by the privacy filter); the active Return Pass still
@@ -375,13 +381,9 @@ public class SeedDataConfig {
     }
 
     private void seedItems(FoundItemRepository foundItems) {
-        FoundItem bottle = foundItem("found_001", "Black Hydro Flask Water Bottle", "food_containers", "Matte black Hydro Flask bottle with a top carry handle and screw cap.", "Black", "Hydro Flask", "Gymnasium", "2026-03-11", "12:15", ItemStatus.FOUND, "FB-2026-HF82");
-        bottle.setPhotoUrls(List.of("/items/black-hydro-flask.jpg"));
-        bottle.setTags(List.of("water bottle", "hydro flask", "black", "gym"));
-        bottle.setStorageLocation("Main Office shelf B2");
-        bottle.setFinderName("Coach Miller");
-        bottle.setFinderEmail("coach.miller@pleasantvalley.edu");
-        bottle.setFinderRole("staff");
+        // The Black Hydro Flask (found_001) was removed: as another water bottle it
+        // competed with the Navy Owala demo item in "bottle" searches. The Owala is
+        // now the only seeded bottle. Existing rows are dropped in seedNarrativeShowcase.
 
         // found_002 (Blue JanSport Backpack) lives in seedRealisticActivity instead,
         // so it is also added to databases that were already seeded by an older build.
@@ -436,7 +438,7 @@ public class SeedDataConfig {
         umbrella.setTags(List.of("umbrella", "red", "compact", "library"));
         umbrella.setStorageLocation("Main Office shelf B3");
 
-        foundItems.saveAll(List.of(bottle, airpods, calculator, passItem, returned, chromebook, hoodie, umbrella));
+        foundItems.saveAll(List.of(airpods, calculator, passItem, returned, chromebook, hoodie, umbrella));
     }
 
     private void seedRealisticActivity(
